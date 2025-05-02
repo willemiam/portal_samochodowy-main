@@ -1,21 +1,45 @@
 <script>
     import { Link } from "svelte-routing";
+    import { isAuthenticated, user } from "../stores/store";
+    import auth from "../authService";
+
+    async function handleLogin() {
+        await auth.loginWithPopup();
+    }
+
+    async function handleLogout() {
+        await auth.logout();
+    }
 </script>
 
 <header class="header">
     <div>
         <h1 id="baner">Top Samochody</h1>
     </div>
+</header>
+<main>
+    {#if $isAuthenticated}
+    <span class="text-white">&nbsp;&nbsp;{$user.name || $user.nickname || $user.email} </span>
+    {:else}<span>&nbsp;</span>{/if}
     <nav class="menu">
         <ul>
             <li><Link to="/">Start</Link></li>
             <li><Link to="/Items">Ogłoszenia</Link></li>
             <li><Link to="/Filter">Filtruj Ogłoszenia</Link></li>
-            <li><Link to="/">Kontakt</Link></li> <!-- Zrobic przekierowanie do danych kontakwoych na dole strony głównej-->
+            <li><Link to="/">Kontakt</Link></li> 
             <li><Link to="/Account">Konto</Link></li>
+            {#if $isAuthenticated}
+            <li class="nav-item">
+                <a class="nav-link" href="/#" on:click|preventDefault={handleLogout}>Log Out</a>
+            </li>
+            {:else}
+            <li class="nav-item">
+                <a class="nav-link" href="/#" on:click|preventDefault={handleLogin}>Log In</a>
+            </li>
+            {/if}
         </ul>
     </nav>
-</header>
+</main>
 
 <style>
     * {
