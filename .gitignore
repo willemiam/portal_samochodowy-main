@@ -1,0 +1,36 @@
+# Byte-compiled / optimized / DLL files
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/*.pyd
+
+# SQLite database files
+backend/*.db
+backend/instance/
+
+# Environment variables
+backend/.env
+frontend/.env
+
+# Node modules
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# VSCode settings
+.vscode/
+
+# Docker
+*.pid
+
+# Misc
+*.swp
+*.swo
