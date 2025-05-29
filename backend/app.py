@@ -32,7 +32,6 @@ with app.app_context():
             "Typ nadwozia": "car_size_class"
         })
 
-        # Sprawdzamy, czy tabela 'cars' zawiera już dane
         existing_cars = db.session.execute(text("SELECT COUNT(*) FROM cars")).fetchone()[0]
         if existing_cars == 0:
             df.to_sql('cars', con=db.engine, if_exists='append', index=False)
@@ -43,7 +42,7 @@ with app.app_context():
         print("Błąd: Plik final_vehicle_data.csv nie został znaleziony.")
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
 
 
 

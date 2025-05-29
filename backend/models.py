@@ -11,7 +11,7 @@ class Users(db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
 
-    # Relacja 1 do wielu 
+
     items = db.relationship('Items', backref='user', lazy=True, cascade="all, delete")
 
     def set_password(self, password):
@@ -59,7 +59,7 @@ class Items(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    car_id = db.Column(db.Integer, db.ForeignKey('cars.id'), nullable=False)  # Zmieniono odniesienie na cars.id
+    car_id = db.Column(db.Integer, db.ForeignKey('cars.id'), nullable=False)  
     price = db.Column(db.Integer, nullable=False)
     car_mileage = db.Column(db.Integer, nullable=False)
     color = db.Column(db.String(50), nullable=False)
