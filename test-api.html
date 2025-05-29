@@ -30,7 +30,8 @@
                     
             } catch (error) {
                 console.error('API call failed:', error);
-                resultDiv.innerHTML = `<h3>Error:</h3><p>${error.message}</p>`;
+                resultDiv.innerHTML = `<h3>Error:</h3><p></p>`;
+                resultDiv.querySelector('p').textContent = error.message;
             }
         }
     </script>
