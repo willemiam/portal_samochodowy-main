@@ -6,7 +6,7 @@ import os
 from sqlalchemy import text
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})  
+CORS(app, resources={r"/*": {"origins": "*"}})  # Zezwalamy na połączenia z dowolnego frontendu
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///vehicles.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -16,13 +16,13 @@ db = SQLAlchemy(app)
 from routes import *
 
 with app.app_context():
-    db.create_all()  
+    db.create_all()  # Tworzy tabele zgodnie z modelami SQLAlchemy
 
-
+    # Wczytanie danych z CSV
     try:
         df = pd.read_csv('final_vehicle_data.csv')
 
-        
+        # Poprawienie nazw kolumn, aby pasowały do modelu Car
         df = df.rename(columns={
             "Make": "make",
             "Model": "model",
