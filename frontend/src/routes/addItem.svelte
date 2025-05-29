@@ -27,7 +27,9 @@
     let submitSuccess = false;
 
     // Temporary user_id - in production this should come from auth
-    const user_id = 1;    async function loadMakes() {
+    const user_id = 1;
+    
+    async function loadMakes() {
         try {
             console.log('Loading makes...');
             makes = await fetchMakes();
