@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Background (transparent) -->
+  <rect x="0" y="0" width="100" height="100" fill="none"/>
+  
+  <!-- Coupe Icon -->
+  <g transform="translate(12, 30)">
+    <!-- Car Body -->
+    <path d="M10 60
+             C12 55, 18 48, 25 45
+             H70
+             C72 45, 73 52, 75 60
+             Z" 
+          fill="#ffffff" 
+          stroke="#006699" 
+          stroke-width="2"/>
+    <!-- Roof -->
+    <path d="M30 45
+             C33 35, 36 28, 40 25
+             H60
+             C62 28, 63 35, 65 45"
+          fill="#ffffff"
+          stroke="#006699"
+          stroke-width="2"/>
+    <!-- Wheels -->
+    <circle cx="25" cy="60" r="8" fill="#006699"/>
+    <circle cx="60" cy="60" r="8" fill="#006699"/>
+  </g>
+</svg>

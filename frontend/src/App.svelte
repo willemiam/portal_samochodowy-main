@@ -1,25 +1,45 @@
 <script>
-  import { Router, Route } from "svelte-routing";
+  import { Router, Link, Route } from "svelte-routing";
   import { onMount } from "svelte";
+  import { wrap } from "svelte-spa-router/wrap";
+
   import auth from "./authService";
   import { isAuthenticated, user } from "./stores/store";
-  import Home from "./routes/Home.svelte";
-  import Items from "./routes/items.svelte";
-  import Filter from "./routes/filter.svelte";
-  // import Kontakt from "./routes/Kontakt.svelte";
-  import Navbar from "./components/Navbar01.svelte";
-  import Account from "./routes/account.svelte"
 
+  import Navbar from "./components/Navbar.svelte";
+  import Home from "./routes/home.svelte";
+  import Account from "./routes/account.svelte";
+  import AddItem from "./routes/addItem.svelte";
+  import Filter from "./routes/filter.svelte";
+  import Footer from "./components/Footer.svelte";
+
+  export let url = "";
   onMount(async () => {
     await auth.checkAuth();
-  })
+  });
 </script>
 
-<Router>
-  <Navbar />
-  <Route path="/" component={Home} />
-  <Route path="/Items" component={Items} />
-  <Route path="/Filter" component={Filter}/>
-  <Route path="/Account" component={Account}/>
-  <!-- <Route path="/kontakt" component={Kontakt} /> -->
+<Router {url}>
+  <div class="app">
+    <Navbar />    <main>
+      <Route path="/" component={Home} />
+      <Route path="/addItem" component={AddItem} />
+      <Route path="/account" component={Account} />
+      <Route path="/filter" component={Filter} />
+    </main>
+
+    <Footer />
+  </div>
 </Router>
+
+<style>
+  .app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  main {
+    flex: 1;
+  }
+</style>
