@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>Car Makes API Test</h1>
+    <button onclick="testAPI()">Test API Call</button>
+    <div id="result"></div>
+    
+    <script>
+        async function testAPI() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Loading...';
+            
+            try {
+                console.log('Making API call to http://localhost:5000/api/cars/makes');
+                const response = await fetch('http://localhost:5000/api/cars/makes');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const makes = await response.json();
+                console.log('API response:', makes);
+                resultDiv.innerHTML = `<h3>Success!</h3><p>Loaded ${makes.length} car makes:</p><ul>` + 
+                    makes.slice(0, 10).map(make => `<li>${make}</li>`).join('') + '</ul>';
+                    
+            } catch (error) {
+                console.error('API call failed:', error);
+                resultDiv.innerHTML = `<h3>Error:</h3><p>${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

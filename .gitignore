@@ -60,3 +60,6 @@ Thumbs.db
 # Misc
 *.swp
 *.swo
+.github/*
+steps_to_do.txt
+steps_to_do.md
