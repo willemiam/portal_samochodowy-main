@@ -38,6 +38,9 @@ class Car(db.Model):
     fuel_type = db.Column(db.String(20))  # Rodzaj paliwa
     engine_displacement = db.Column(db.Float)  # Pojemność silnika
     car_size_class = db.Column(db.String(50))  # Typ nadwozia
+    doors = db.Column(db.Integer)  # Liczba drzwi
+    transmission = db.Column(db.String(20))  # Skrzynia biegów
+    drive_type = db.Column(db.String(20))  # Napęd
 
     # Relacja do Items
     items = db.relationship('Items', backref='car', lazy=True, cascade="all, delete")
@@ -50,7 +53,10 @@ class Car(db.Model):
             "year": self.year,
             "fuel_type": self.fuel_type,
             "engine_displacement": self.engine_displacement,
-            "car_size_class": self.car_size_class
+            "car_size_class": self.car_size_class,
+            "doors": self.doors,
+            "transmission": self.transmission,
+            "drive_type": self.drive_type
         }
 
 

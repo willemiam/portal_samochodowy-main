@@ -2,3 +2,7 @@ Flask
 flask_sqlalchemy
 flask_cors
 pandas
+PyJWT
+requests
+python-jose[cryptography]
+python-dotenv
