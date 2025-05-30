@@ -9,13 +9,15 @@
     <div id="result"></div>
     
     <script>
+        const BASE_URL = 'http://localhost:5000'; // Change this to match your environment
+        
         async function testAPI() {
             const resultDiv = document.getElementById('result');
             resultDiv.innerHTML = 'Loading...';
             
             try {
-                console.log('Making API call to http://localhost:5000/api/cars/makes');
-                const response = await fetch('http://localhost:5000/api/cars/makes');
+                console.log(`Making API call to ${BASE_URL}/api/cars/makes`);
+                const response = await fetch(`${BASE_URL}/api/cars/makes`);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -28,7 +30,8 @@
                     
             } catch (error) {
                 console.error('API call failed:', error);
-                resultDiv.innerHTML = `<h3>Error:</h3><p>${error.message}</p>`;
+                resultDiv.innerHTML = `<h3>Error:</h3><p></p>`;
+                resultDiv.querySelector('p').textContent = error.message;
             }
         }
     </script>

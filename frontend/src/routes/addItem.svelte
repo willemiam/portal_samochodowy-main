@@ -40,6 +40,8 @@
         userValue = value;
         console.log('✅ userValue updated to:', userValue);
     });
+    let submitSuccess = false;
+
     
     async function loadMakes() {
         try {
