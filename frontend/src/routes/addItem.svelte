@@ -27,10 +27,19 @@
     let submitSuccess = false;    // Authentication state
     let isAuthenticatedValue = false;
     let userValue = null;
-    
-    // Subscribe to authentication stores
-    isAuthenticated.subscribe(value => isAuthenticatedValue = value);
-    user.subscribe(value => userValue = value);async function loadMakes() {
+      // Subscribe to authentication stores with enhanced debugging
+    isAuthenticated.subscribe(value => {
+        console.log('🔐 Authentication state changed in addItem:', value);
+        console.log('📊 Previous auth state:', isAuthenticatedValue, '→ New state:', value);
+        isAuthenticatedValue = value;
+        console.log('✅ isAuthenticatedValue updated to:', isAuthenticatedValue);
+    });
+    user.subscribe(value => {
+        console.log('👤 User state changed in addItem:', value);
+        console.log('📊 Previous user:', userValue, '→ New user:', value);
+        userValue = value;
+        console.log('✅ userValue updated to:', userValue);
+    });async function loadMakes() {
         try {
             console.log('Loading makes...');
             makes = await fetchMakes();
@@ -249,8 +258,7 @@
     }
 </script>
 
-<div class="container">
-    <div class="main-baner">
+<div class="container">    <div class="main-baner">
         <h3>Dodaj ogłoszenie swojego samochodu</h3>
         <p>
             Dodaj wszystkie wymagane parametry, a następnie skorzytaj z pomocy
