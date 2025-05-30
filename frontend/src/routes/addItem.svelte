@@ -39,7 +39,9 @@
         console.log('📊 Previous user:', userValue, '→ New user:', value);
         userValue = value;
         console.log('✅ userValue updated to:', userValue);
-    });async function loadMakes() {
+    });
+    
+    async function loadMakes() {
         try {
             console.log('Loading makes...');
             makes = await fetchMakes();
