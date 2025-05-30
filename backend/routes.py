@@ -3,6 +3,7 @@ from werkzeug.security import generate_password_hash
 from app import app, db
 from models import *
 from models import Car
+from auth_middleware import requires_auth, requires_auth_optional
 
 
 #ENDPOINT UŻYTKOWNIKÓW
@@ -86,16 +87,19 @@ def delete_user(user_id):
 
 #Tworzenie nowego ogłoszenia
 @app.route('/api/items', methods=['POST'])
+@requires_auth
 def create_item():
     try:
         data = request.json
-
-        required_fields = ['user_id', 'make', 'model', 'year', 'price', 'car_mileage', 'color', 'description']
+        user = request.current_user  # Get authenticated user
+        
+        required_fields = ['make', 'model', 'year', 'price', 'car_mileage', 'color', 'description']
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'Input required field {field}'}), 400
 
-        user_id = data.get('user_id')
+        # Remove user_id from required fields since we get it from auth
+        user_id = user.id
         make = data.get('make')
         model = data.get('model')
         year = data.get('year')
@@ -179,16 +183,17 @@ def get_item(item_id):
 
 #Edycja ogłoszenia
 @app.route('/api/items/<int:item_id>', methods=['PUT'])
+@requires_auth
 def update_item(item_id):
     data = request.json
-    user_id = data.get('user_id')  # Pobieramy ID użytkownika, który chce edytować
+    user = request.current_user  # Get authenticated user
 
     item = Items.query.get(item_id)
     if not item:
         return jsonify({'error': 'Item not found'}), 404
 
     # Sprawdzamy, czy użytkownik jest właścicielem ogłoszenia
-    if item.user_id != user_id:
+    if item.user_id != user.id:
         return jsonify({'error': 'You are not authorized to edit this item'}), 403
 
     # Aktualizacja danych (tylko wybrane pola)
@@ -207,16 +212,16 @@ def update_item(item_id):
 
 #Usuwanie ogłoszenia
 @app.route('/api/items/<int:item_id>', methods=['DELETE'])
+@requires_auth
 def delete_item(item_id):
-    data = request.json
-    user_id = data.get('user_id')  # Pobieramy ID użytkownika, który chce usunąć ogłoszenie
+    user = request.current_user  # Get authenticated user
 
     item = Items.query.get(item_id)
     if not item:
         return jsonify({'error': 'Item not found'}), 404
 
     # Sprawdzamy, czy użytkownik jest właścicielem ogłoszenia
-    if item.user_id != user_id:
+    if item.user_id != user.id:
         return jsonify({'error': 'You are not authorized to delete this item'}), 403
 
     db.session.delete(item)

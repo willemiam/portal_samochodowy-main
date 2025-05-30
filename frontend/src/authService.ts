@@ -64,11 +64,25 @@ async function logout() {
     }
 }
 
+async function getAccessToken() {
+    const client = await getClient();
+    if (!client) return null;
+    
+    try {
+        const token = await client.getTokenSilently();
+        return token;
+    } catch (e) {
+        console.error("Error getting access token:", e);
+        return null;
+    }
+}
+
 const auth = {
     getClient, 
     checkAuth, 
     loginWithPopup,
-    logout
+    logout,
+    getAccessToken
 };
 
 export default auth;

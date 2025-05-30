@@ -1,7 +1,8 @@
-<script>
-    import { onMount } from 'svelte';
+<script>    import { onMount } from 'svelte';
     import PhotoGrid from "../components/PhotoGrid.svelte";
     import { fetchMakes, fetchModels, createItem } from "../lib/api.js";
+    import { isAuthenticated, user } from "../stores/store.ts";
+    import auth from "../authService.ts";
       let formPhotos = [];
     let make = "";
     let model = "";
@@ -20,14 +21,16 @@
     let makes = [];
     let models = [];
     let years = Array.from({ length: 30 }, (_, i) => 2024 - i); 
-    let descriptionRef;
-      let isSubmitting = false;
+    let descriptionRef;    let isSubmitting = false;
     let isGeneratingDescription = false;
     let submitError = "";
-    let submitSuccess = false;
-
-    // Temporary user_id - in production this should come from auth
-    const user_id = 1;    async function loadMakes() {
+    let submitSuccess = false;    // Authentication state
+    let isAuthenticatedValue = false;
+    let userValue = null;
+    
+    // Subscribe to authentication stores
+    isAuthenticated.subscribe(value => isAuthenticatedValue = value);
+    user.subscribe(value => userValue = value);async function loadMakes() {
         try {
             console.log('Loading makes...');
             makes = await fetchMakes();
@@ -132,9 +135,10 @@
             } else if (mileageNum <= 250000) {
                 carData.condition = "fair";
             } else {
-                carData.condition = "poor";
-            }
-        }        try {
+                carData.condition = "poor";            }
+        }
+        
+        try {
             isGeneratingDescription = true;
             
             // Console logging for debugging
@@ -147,13 +151,14 @@
             const startTime = performance.now();
             const description = await generateDescription(carData);
             const endTime = performance.now();
-            
-            console.log('✅ AI description generated successfully!');
+              console.log('✅ AI description generated successfully!');
             console.log('⏱️ Request took:', Math.round(endTime - startTime), 'ms');
             console.log('📄 Generated description length:', description.length, 'characters');
             console.log('📝 Generated description preview:', description.substring(0, 100) + '...');
             
-            descriptionRef.value = description;
+            if (descriptionRef) {
+                descriptionRef.value = description;
+            }
             submitError = ""; // Clear any previous errors
         } catch (e) {
             console.error('❌ Error generating AI description:', e);
@@ -171,22 +176,24 @@
                 console.log('⚠️ AI service error:', e.message);
                 submitError = `Błąd generowania opisu AI: ${e.message}`;
             }
-            
-            // Don't overwrite existing description on error
-            if (!descriptionRef.value) {
+              // Don't overwrite existing description on error
+            if (descriptionRef && !descriptionRef.value) {
                 descriptionRef.value = "Wystąpił błąd podczas generowania opisu AI - napisz opis ręcznie.";
             }
         } finally {
             isGeneratingDescription = false;
             console.log('🏁 AI description generation process completed');
         }
-    }
-
-    async function handleSubmit(event) {
+    }    async function handleSubmit(event) {
         event.preventDefault();
           // Reset previous states
         submitError = "";
         submitSuccess = false;
+          // Check authentication status
+        if (!isAuthenticatedValue) {
+            submitError = "Musisz być zalogowany, aby dodać ogłoszenie";
+            return;
+        }
         
         // Validate required fields
         if (!make || !model || !year || !price || !car_mileage || !color || !descriptionRef?.value) {
@@ -198,7 +205,7 @@
 
         try {
             const itemData = {
-                user_id,
+                // user_id is now extracted from JWT token on backend
                 make,
                 model,
                 year: parseInt(year),
@@ -226,11 +233,13 @@
             color = "";
             fuel_type = "";
             engine_displacement = "";
-            car_size_class = "";
-            doors = "";
+            car_size_class = "";            doors = "";
             transmission = "";
             drive_type = "";
-            descriptionRef.value = "";
+            customFeatures = "";
+            if (descriptionRef) {
+                descriptionRef.value = "";
+            }
             
         } catch (error) {
             submitError = error.message;
@@ -247,7 +256,16 @@
             Dodaj wszystkie wymagane parametry, a następnie skorzytaj z pomocy
             AI i wynegeruj opis samochodu jednym kliknięciem!
         </p>
-    </div>    <div class="search-box">
+    </div>
+      <div class="search-box">
+        {#if !isAuthenticatedValue}
+            <div class="auth-required-message">
+                <h4>🔐 Logowanie wymagane</h4>
+                <p>Aby dodać ogłoszenie, musisz być zalogowany.</p>                <button type="button" class="auction-btn" on:click={() => auth.loginWithPopup()}>
+                    Zaloguj się
+                </button>
+            </div>
+        {:else}
         <form class="search-form" on:submit={handleSubmit}>
             
             {#if submitSuccess}
@@ -393,12 +411,11 @@
                 </button>
             </div>
             
-            <PhotoGrid />
-
-            <button type="submit" class="auction-btn" id="add-item-btn" disabled={isSubmitting}>
+            <PhotoGrid />            <button type="submit" class="auction-btn" id="add-item-btn" disabled={isSubmitting}>
                 {isSubmitting ? 'Dodawanie...' : 'Dodaj ogłoszenie'}
             </button>
         </form>
+        {/if}
     </div>
 </div>
 
@@ -545,10 +562,29 @@
         border-radius: 0.25rem;
         transition: all 0.2s ease;
     }
-    
-    .auction-btn:disabled {
+      .auction-btn:disabled {
         background-color: #ccc;
         cursor: not-allowed;
         opacity: 0.6;
+    }
+    
+    .auth-required-message {
+        text-align: center;
+        padding: 2rem;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        border: 1px solid #dee2e6;
+    }
+    
+    .auth-required-message h4 {
+        color: #495057;
+        margin-bottom: 1rem;
+        font-size: 1.5rem;
+    }
+    
+    .auth-required-message p {
+        color: #6c757d;
+        margin-bottom: 1.5rem;
+        font-size: 1.1rem;
     }
 </style>

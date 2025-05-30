@@ -1,6 +1,22 @@
 export const API_URL = "http://localhost:5000"; 
 // Jeśli backend działa na innym porcie, zmień na np. http://127.0.0.1:8000
 
+import auth from '../authService.ts';
+
+// Helper function to get authorization headers
+async function getAuthHeaders() {
+    const token = await auth.getAccessToken();
+    const headers = {
+        'Content-Type': 'application/json',
+    };
+    
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    return headers;
+}
+
 // Pobranie wszystkich ogłoszeń
 export async function fetchItems() {
   const response = await fetch(`${API_URL}/api/items`);
@@ -42,12 +58,15 @@ export async function fetchModels(make) {
 
 // Tworzenie nowego ogłoszenia
 export async function createItem(itemData) {
+  const headers = await getAuthHeaders();
+  
+  // Remove user_id from itemData since it comes from auth token
+  const { user_id, ...cleanItemData } = itemData;
+  
   const response = await fetch(`${API_URL}/api/items`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(itemData),
+    headers,
+    body: JSON.stringify(cleanItemData),
   });
   
   if (!response.ok) {
