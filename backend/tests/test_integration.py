@@ -296,12 +296,16 @@ class TestApplicationRobustness:
     def test_database_connection_recovery(self, app_context):
         """Test application behavior under database stress."""
         # Test multiple concurrent database operations
+        import time
+        timestamp = int(time.time())
+        test_id = id(self)
+        
         users = []
         for i in range(10):
             user = Users(
                 first_name=f'User{i}',
                 last_name=f'Test{i}',
-                email=f'user{i}@test.com',
+                email=f'user{i}.{timestamp}.{test_id}@test.com',
                 password_hash='password'
             )
             users.append(user)

@@ -37,7 +37,14 @@ def client(test_app):
 def app_context(test_app):
     """Create an application context for database operations."""
     with test_app.app_context():
+        # Clear all data before each test
+        db.session.remove()
+        db.drop_all()
+        db.create_all()
         yield test_app
+        # Clean up after each test
+        db.session.remove()
+        db.drop_all()
 
 
 @pytest.fixture
