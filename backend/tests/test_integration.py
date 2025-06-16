@@ -211,7 +211,8 @@ class TestDataIntegrity:
             assert len(cars) == 2
             
             # Verify first car data integrity
-            bmw = cars[0]  # BMW comes first alphabetically            assert bmw.make == 'BMW'
+            bmw = cars[0]  # BMW comes first alphabetically
+            assert bmw.make == 'BMW'
             assert bmw.model == 'X5'
             assert bmw.year == 2019
             assert bmw.fuel_type == 'Diesel'
