@@ -128,16 +128,18 @@ def create_item():
             db.session.commit()
             car_id = new_car.id
         else:
-            car_id = existing_car.id
-
-        # Tworzymy ogłoszenie
+            car_id = existing_car.id        # Tworzymy ogłoszenie
+        attributes = {
+            'car_mileage': car_mileage,
+            'color': color
+        }
+        
         new_item = Items(
             user_id=user_id,
             car_id=car_id,
             price=price,
-            car_mileage=car_mileage,
-            color=color,
-            description=description
+            description=description,
+            attributes=attributes
         )
 
         db.session.add(new_item)
@@ -156,16 +158,19 @@ def get_all_items():
 
     result = []
     for item, car in items:
+        car_mileage = item.attributes.get('car_mileage') if item.attributes else None
+        color = item.attributes.get('color') if item.attributes else None
+        
         result.append({
             "id": item.id,
             "userId": item.user_id,
             "carId": item.car_id,
-            "make": car.make,  # Dodajemy markę samochodu
-            "model": car.model,  # Dodajemy model samochodu
+            "make": car.make,
+            "model": car.model,
             "year": car.year,
             "price": item.price,
-            "carMileage": item.car_mileage,
-            "color": item.color,
+            "carMileage": car_mileage,
+            "color": color,
             "description": item.description,
             "createdAt": item.created_at.strftime("%Y-%m-%d %H:%M:%S")
         })
@@ -194,15 +199,16 @@ def update_item(item_id):
 
     # Sprawdzamy, czy użytkownik jest właścicielem ogłoszenia
     if item.user_id != user.id:
-        return jsonify({'error': 'You are not authorized to edit this item'}), 403
-
-    # Aktualizacja danych (tylko wybrane pola)
+        return jsonify({'error': 'You are not authorized to edit this item'}), 403    # Aktualizacja danych (tylko wybrane pola)
     if 'price' in data:
         item.price = data['price']
-    if 'car_mileage' in data:
-        item.car_mileage = data['car_mileage']
-    if 'color' in data:
-        item.color = data['color']
+    if 'car_mileage' in data or 'color' in data:
+        if not item.attributes:
+            item.attributes = {}
+        if 'car_mileage' in data:
+            item.attributes['car_mileage'] = data['car_mileage']
+        if 'color' in data:
+            item.attributes['color'] = data['color']
     if 'description' in data:
         item.description = data['description']
 
@@ -241,7 +247,7 @@ def filter_items():
 
     # Filtry
     if make:
-        query = query.filter(Car.make.ilike(f"%{make}%"))  # ilike() dla wyszukiwania nieczułego na wielkość liter
+        query = query.filter(Car.make.ilike(f"%{make}%"))
     if model:
         query = query.filter(Car.model.ilike(f"%{model}%"))
     if year:
@@ -255,19 +261,22 @@ def filter_items():
 
     result = []
     for item, car in filtered_items:
+        car_mileage = item.attributes.get('car_mileage') if item.attributes else None
+        color = item.attributes.get('color') if item.attributes else None
+        
         result.append({
             "id": item.id,
             "userId": item.user_id,
             "carId": item.car_id,
-            "make": car.make,  # Marka samochodu
-            "model": car.model,  # Model samochodu
-            "year": car.year,  # Rok produkcji
-            "fuelType": car.fuel_type,  # Rodzaj paliwa
-            "engineDisplacement": car.engine_displacement,  # Pojemność silnika
-            "carSizeClass": car.car_size_class,  # Klasa rozmiaru pojazdu
+            "make": car.make,
+            "model": car.model,
+            "year": car.year,
+            "fuelType": car.fuel_type,
+            "engineDisplacement": car.engine_displacement,
+            "carSizeClass": car.car_size_class,
             "price": item.price,
-            "carMileage": item.car_mileage,
-            "color": item.color,
+            "carMileage": car_mileage,
+            "color": color,
             "description": item.description,
             "createdAt": item.created_at.strftime("%Y-%m-%d %H:%M:%S")
         })
