@@ -25,8 +25,6 @@ app.config['DISABLE_AUTH'] = os.environ.get('DISABLE_AUTH', 'True').lower() == '
 
 db = SQLAlchemy(app)
 
-from routes import *
-
 def init_database():
     """Initialize database and load CSV data"""
     with app.app_context():
@@ -52,6 +50,9 @@ def init_database():
                 print("Tabela 'cars' już zawiera dane. Pominięto ładowanie CSV.")
         except FileNotFoundError:
             print("Błąd: Plik final_vehicle_data.csv nie został znaleziony.")
+
+# Import routes after everything else is set up
+import routes
 
 if __name__ == '__main__':
     init_database()
