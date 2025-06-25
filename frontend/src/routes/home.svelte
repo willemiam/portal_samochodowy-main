@@ -23,28 +23,6 @@
 
 <MainBanner />
 
-<section class="section categories">
-  <div class="container">
-    <CategoryFilter />
-  </div>
-</section>
-
-<section class="section featured-cars">
-  <div class="container">
-    <div class="section-title">
-      <h2>Featured Cars</h2>
-      <a href="/filter" class="view-all">View All</a>
-    </div>
-
-    <div class="grid">
-      {#each featuredCars as car}
-        <CarCard {car} />
-      {:else}
-        <p>Loading featured cars...</p>
-      {/each}
-    </div>
-  </div>
-</section>
 
 <style>
   .categories {
