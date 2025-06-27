@@ -1,83 +1,117 @@
 <script>
     import { onMount } from "svelte";
 
-    // Liczba maksymalnych zdjęć, które użytkownik może dodać
     const MAX_IMAGES = 8;
 
-    // Tablica na zdjęcia (będzie zawierać obiekty URL lub pliki)
     let images = Array(MAX_IMAGES).fill(null);
 
-    // Indeks zdjęcia głównego (pierwsze zdjęcie będzie główne)
     let mainImageIndex = 0;
 
-    // Referencja do ukrytego input file
     let fileInput;
 
-    // Funkcja do obsługi wyboru plików
-    function handleFileSelect(event) {
+    let isUploading = false;
+
+    // Expose uploadImages function for parent component
+    export function getPhotosData() {
+        const photosData = images
+            .filter((img) => img !== null)
+            .map((img, index) => ({
+                filename: img.filename,
+                stored_filename: img.stored_filename,
+                file_path: img.file_path,
+                file_size: img.file_size,
+                mime_type: img.mime_type,
+                storage_type: img.storage_type,
+                is_main: index === mainImageIndex,
+            }));
+        return photosData;
+    }
+
+    async function handleFileSelect(event) {
         const files = event.target.files;
 
         if (!files || files.length === 0) return;
 
-        // Znajdź pierwszy pusty slot na zdjęcie
         const emptyIndex = images.findIndex((img) => img === null);
         if (emptyIndex === -1) {
             alert("Osiągnięto maksymalną liczbę zdjęć.");
             return;
         }
 
-        // Utwórz URL dla podglądu zdjęcia
-        const imageUrl = URL.createObjectURL(files[0]);
+        isUploading = true;
 
-        // Jeśli to pierwsze zdjęcie, ustaw je jako główne
-        if (images.every((img) => img === null)) {
-            mainImageIndex = 0;
+        try {
+            // Upload file to server
+            const formData = new FormData();
+            formData.append('file', files[0]);
+
+            const response = await fetch('/api/photos/upload', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Upload failed');
+            }
+
+            const result = await response.json();
+            const fileInfo = result.file;
+
+            // Create preview URL for display
+            const previewUrl = fileInfo.file_path.startsWith('http') 
+                ? fileInfo.file_path 
+                : `http://localhost:5000${fileInfo.file_path}`;
+
+            if (images.every((img) => img === null)) {
+                mainImageIndex = 0;
+            }
+
+            // Store uploaded file info
+            images[emptyIndex] = {
+                filename: fileInfo.filename,
+                stored_filename: fileInfo.stored_filename,
+                file_path: fileInfo.file_path,
+                file_size: fileInfo.file_size,
+                mime_type: fileInfo.mime_type,
+                storage_type: fileInfo.storage_type,
+                url: previewUrl // For display purposes
+            };
+
+            images = [...images];
+
+        } catch (error) {
+            alert(`Błąd podczas przesyłania zdjęcia: ${error.message}`);
+        } finally {
+            isUploading = false;
         }
 
-        // Aktualizuj tablicę zdjęć
-        images[emptyIndex] = {
-            file: files[0],
-            url: imageUrl,
-        };
-
-        // Wymuszenie aktualizacji widoku
-        images = [...images];
-
-        // Resetuj input file, aby można było wybrać to samo zdjęcie ponownie
         event.target.value = "";
     }
 
-    // Funkcja do usuwania zdjęcia
     function removeImage(index) {
-        // Jeśli usuwamy zdjęcie główne, musimy ustawić nowe zdjęcie główne
         if (index === mainImageIndex) {
-            // Znajdź pierwsze nieusunięte zdjęcie jako nowe główne
             const newMainIndex = images.findIndex(
                 (img, i) => i !== index && img !== null,
             );
             mainImageIndex = newMainIndex !== -1 ? newMainIndex : 0;
         }
 
-        // Usunięcie URL obiektu aby zapobiec wyciekom pamięci
         if (images[index] && images[index].url) {
             URL.revokeObjectURL(images[index].url);
         }
-
-        // Ustaw slot jako pusty
         images[index] = null;
-
-        // Wymuszenie aktualizacji widoku
         images = [...images];
     }
 
-    // Funkcja do ustawienia zdjęcia jako główne
     function setAsMain(index) {
         if (images[index] !== null) {
             mainImageIndex = index;
         }
     }
-
-    // Funkcja do obsługi przeciągania (drag-and-drop)
     let draggedIndex = -1;
 
     function handleDragStart(index) {
@@ -88,22 +122,18 @@
     function handleDragOver(index) {
         if (draggedIndex === -1 || draggedIndex === index) return;
 
-        // Zamień miejscami zdjęcia
         const temp = images[draggedIndex];
         images[draggedIndex] = images[index];
         images[index] = temp;
 
-        // Aktualizuj indeks zdjęcia głównego, jeśli jest przesuwane
         if (mainImageIndex === draggedIndex) {
             mainImageIndex = index;
         } else if (mainImageIndex === index) {
             mainImageIndex = draggedIndex;
         }
 
-        // Aktualizacja przeciąganego indeksu
         draggedIndex = index;
 
-        // Wymuszenie aktualizacji widoku
         images = [...images];
     }
 
@@ -111,21 +141,17 @@
         draggedIndex = -1;
     }
 
-    // Funkcja wywoływana przy zniszczeniu komponentu
     onMount(() => {
         return () => {
-            // Zwolnij wszystkie URL obiektów, aby zapobiec wyciekom pamięci
             images.forEach((img) => {
-                if (img && img.url) {
+                if (img && img.url && img.url.startsWith('blob:')) {
                     URL.revokeObjectURL(img.url);
                 }
             });
         };
     });
 
-    // Funkcja do wysyłania zdjęć do serwera (przykład)
     function uploadImages() {
-        // Filtruj wszystkie niepuste sloty
         const filesToUpload = images
             .filter((img) => img !== null)
             .map((img, index) => ({
@@ -134,8 +160,6 @@
             }));
 
         console.log("Zdjęcia do wysłania:", filesToUpload);
-        // Tutaj należy dodać logikę wysyłania plików na serwer
-        // np. za pomocą FormData i fetch API
     }
 </script>
 
@@ -145,6 +169,12 @@
         Pierwsze zdjęcie będzie zdjęciem głównym. Przeciągaj zdjęcia na inne
         miejsca, aby zmienić ich kolejność.
     </p>
+
+    {#if isUploading}
+        <div class="upload-progress">
+            <p>Przesyłanie zdjęcia...</p>
+        </div>
+    {/if}
 
     <div class="photos-container">
         {#each images as image, index}
@@ -159,18 +189,17 @@
             >
                 {#if image === null}
                     {#if index === 0}
-                        <!-- Pierwszy pusty slot - przycisk "Dodaj zdjęcie" -->
                         <button
                             class="add-photo-btn"
                             on:click={() => fileInput.click()}
+                            disabled={isUploading}
                         >
-                            Dodaj zdjęcie
+                            {isUploading ? 'Przesyłanie...' : 'Dodaj zdjęcie'}
                         </button>
                     {:else}
-                        <!-- Pozostałe puste sloty - ikona aparatu -->
                         <div
                             class="empty-slot"
-                            on:click={() => fileInput.click()}
+                            on:click={() => !isUploading && fileInput.click()}
                         >
                             <svg viewBox="0 0 24 24" class="camera-icon">
                                 <path
@@ -183,7 +212,6 @@
                         </div>
                     {/if}
                 {:else}
-                    <!-- Slot ze zdjęciem -->
                     <div class="photo-preview">
                         <img src={image.url} alt="Podgląd zdjęcia" />
                         <div class="photo-actions">
@@ -218,17 +246,15 @@
         {/each}
     </div>
 
-    <!-- Ukryty input file do wyboru zdjęć -->
     <input
         type="file"
         bind:this={fileInput}
         on:change={handleFileSelect}
         accept="image/*"
         style="display: none;"
+        disabled={isUploading}
     />
 
-    <!-- Opcjonalny przycisk do wysłania zdjęć -->
-    <!-- <button class="upload-btn" on:click={uploadImages}>Zapisz zdjęcia</button> -->
 </div>
 
 <style>
@@ -249,6 +275,16 @@
         font-size: 14px;
         color: #666;
         margin-bottom: 20px;
+    }
+
+    .upload-progress {
+        background-color: #e3f2fd;
+        border: 1px solid #2196f3;
+        border-radius: 4px;
+        padding: 12px;
+        margin-bottom: 16px;
+        text-align: center;
+        color: #1976d2;
     }
 
     .photos-container {
@@ -316,8 +352,13 @@
         transition: background-color 0.2s ease;
     }
 
-    .add-photo-btn:hover {
+    .add-photo-btn:hover:not(:disabled) {
         background-color: #fff5cc;
+    }
+
+    .add-photo-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
 
     .photo-preview {

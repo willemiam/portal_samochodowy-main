@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 import pandas as pd
@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='uploads', static_url_path='/uploads')
 CORS(app, resources={r"/*": {"origins": "*"}})  
 
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///vehicles.db'
@@ -52,6 +52,8 @@ def init_database():
                 print("Tabela 'cars' już zawiera dane. Pominięto ładowanie CSV.")
         except FileNotFoundError:
             print("Błąd: Plik final_vehicle_data.csv nie został znaleziony.")
+
+
 
 if __name__ == '__main__':
     init_database()

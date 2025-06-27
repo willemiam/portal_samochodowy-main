@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import List
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import JSON
 from app import db
@@ -154,6 +155,9 @@ class Items(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Add relationship to photos
+    photos = db.relationship('Photo', backref='item', lazy=True, cascade="all, delete", order_by='Photo.display_order')
+
     def to_json(self):
         result = {
             'id': self.id,
@@ -165,7 +169,8 @@ class Items(db.Model):
             'attributes': self.attributes,
             'isActive': self.is_active,
             'createdAt': self.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-            'updatedAt': self.updated_at.strftime("%Y-%m-%d %H:%M:%S")
+            'updatedAt': self.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
+            'photos': [photo.to_json() for photo in getattr(self, 'photos', [])]
         }
         
         if self.product_id:
@@ -178,3 +183,33 @@ class Items(db.Model):
                 result['color'] = self.attributes['color']
         
         return result
+
+
+class Photo(db.Model):
+    __tablename__ = 'photos'
+
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey('items.id'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)  # Original filename
+    stored_filename = db.Column(db.String(255), nullable=False)  # Unique filename on disk/S3
+    file_path = db.Column(db.String(500), nullable=False)  # Full path or URL
+    file_size = db.Column(db.Integer)  # Size in bytes
+    mime_type = db.Column(db.String(100))  # image/jpeg, image/png, etc.
+    is_main = db.Column(db.Boolean, default=False, nullable=False)  # Main photo flag
+    display_order = db.Column(db.Integer, default=0, nullable=False)  # Order in gallery
+    storage_type = db.Column(db.String(20), default='local', nullable=False)  # 'local' or 'aws_s3'
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_json(self):
+        return {
+            'id': self.id,
+            'itemId': self.item_id,
+            'filename': self.filename,
+            'filePath': self.file_path,
+            'fileSize': self.file_size,
+            'mimeType': self.mime_type,
+            'isMain': self.is_main,
+            'displayOrder': self.display_order,
+            'storageType': self.storage_type,
+            'createdAt': self.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        }

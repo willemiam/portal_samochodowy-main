@@ -2,8 +2,9 @@ from flask import Flask, jsonify, request
 from werkzeug.security import generate_password_hash
 from app import app, db
 from models import *
-from models import Car
+from models import Car, Photo
 from auth_middleware import requires_auth, requires_auth_optional
+from services.storage_service import storage_service
 
 
 #ENDPOINT UŻYTKOWNIKÓW
@@ -91,7 +92,7 @@ def delete_user(user_id):
 def create_item():
     try:
         data = request.json
-        user = request.current_user  # Get authenticated user
+        user = request.current_user  
         
         required_fields = ['make', 'model', 'year', 'price', 'car_mileage', 'color', 'description']
         for field in required_fields:
@@ -113,17 +114,16 @@ def create_item():
 
         if not existing_car:
             # Tworzymy nowy samochód
-            new_car = Car(
-                make=make,
-                model=model,
-                year=year,
-                fuel_type=data.get('fuel_type'),
-                engine_displacement=data.get('engine_displacement'),
-                car_size_class=data.get('car_size_class'),
-                doors=data.get('doors'),
-                transmission=data.get('transmission'),
-                drive_type=data.get('drive_type')
-            )
+            new_car = Car()
+            new_car.make = make
+            new_car.model = model
+            new_car.year = year
+            new_car.fuel_type = data.get('fuel_type')
+            new_car.engine_displacement = data.get('engine_displacement')
+            new_car.car_size_class = data.get('car_size_class')
+            new_car.doors = data.get('doors')
+            new_car.transmission = data.get('transmission')
+            new_car.drive_type = data.get('drive_type')
             db.session.add(new_car)
             db.session.commit()
             car_id = new_car.id
@@ -300,4 +300,182 @@ def get_models():
 
     models = db.session.query(Car.model).filter(Car.make == make).distinct().order_by(Car.model).all()
     return jsonify([model[0] for model in models]), 200
+
+# Photo upload endpoint
+@app.route('/api/photos/upload', methods=['POST'])
+@requires_auth
+def upload_photo():
+    """Upload a single photo file"""
+    try:
+        user = request.current_user
+        
+        # Check if file is in request
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        # Upload file using storage service
+        success, file_info, error_message = storage_service.upload_file(file)
+        
+        if not success:
+            return jsonify({'error': error_message}), 400
+
+        # Return file info for frontend to store temporarily
+        return jsonify({
+            'success': True,
+            'file': file_info
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+
+
+# Batch photo upload for item
+@app.route('/api/items/<int:item_id>/photos', methods=['POST'])
+@requires_auth
+def upload_item_photos(item_id):
+    """Upload multiple photos for an item"""
+    try:
+        user = request.current_user
+        
+        # Check if item exists and user owns it
+        item = Items.query.get(item_id)
+        if not item:
+            return jsonify({'error': 'Item not found'}), 404
+        
+        if item.user_id != user.id:
+            return jsonify({'error': 'You are not authorized to upload photos for this item'}), 403
+
+        # Get photo data from request
+        data = request.json
+        if not data or 'photos' not in data:
+            return jsonify({'error': 'No photo data provided'}), 400
+
+        photos_data = data['photos']
+        saved_photos = []
+
+        for idx, photo_data in enumerate(photos_data):
+            # Create photo record in database
+            photo = Photo(
+                item_id=item_id,
+                filename=photo_data['filename'],
+                stored_filename=photo_data['stored_filename'],
+                file_path=photo_data['file_path'],
+                file_size=photo_data.get('file_size'),
+                mime_type=photo_data.get('mime_type'),
+                is_main=photo_data.get('is_main', False),
+                display_order=idx,
+                storage_type=photo_data.get('storage_type', 'local')
+            )
+            
+            db.session.add(photo)
+            saved_photos.append(photo)
+
+        # Ensure only one main photo
+        main_photos = [p for p in saved_photos if p.is_main]
+        if len(main_photos) > 1:
+            # Keep only the first one as main
+            for i, photo in enumerate(main_photos):
+                if i > 0:
+                    photo.is_main = False
+        elif len(main_photos) == 0 and saved_photos:
+            # Set first photo as main if none specified
+            saved_photos[0].is_main = True
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'Uploaded {len(saved_photos)} photos',
+            'photos': [photo.to_json() for photo in saved_photos]
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Photo upload failed: {str(e)}'}), 500
+
+
+# Get photos for an item
+@app.route('/api/items/<int:item_id>/photos', methods=['GET'])
+def get_item_photos(item_id):
+    """Get all photos for an item"""
+    item = Items.query.get(item_id)
+    if not item:
+        return jsonify({'error': 'Item not found'}), 404
+
+    photos = Photo.query.filter_by(item_id=item_id).order_by(Photo.display_order).all()
+    
+    return jsonify({
+        'photos': [photo.to_json() for photo in photos]
+    }), 200
+
+
+# Delete a photo
+@app.route('/api/photos/<int:photo_id>', methods=['DELETE'])
+@requires_auth
+def delete_photo(photo_id):
+    """Delete a photo"""
+    try:
+        user = request.current_user
+        
+        photo = Photo.query.get(photo_id)
+        if not photo:
+            return jsonify({'error': 'Photo not found'}), 404
+
+        # Check if user owns the item
+        item = Items.query.get(photo.item_id)
+        if not item or item.user_id != user.id:
+            return jsonify({'error': 'You are not authorized to delete this photo'}), 403
+
+        # Delete file from storage
+        storage_service.delete_file(photo.file_path, photo.storage_type)
+        
+        # Delete from database
+        db.session.delete(photo)
+        db.session.commit()
+
+        return jsonify({'message': 'Photo deleted successfully'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Delete failed: {str(e)}'}), 500
+
+
+# Update photo order and main photo
+@app.route('/api/items/<int:item_id>/photos/reorder', methods=['PUT'])
+@requires_auth
+def reorder_photos(item_id):
+    """Reorder photos and set main photo"""
+    try:
+        user = request.current_user
+        
+        # Check if item exists and user owns it
+        item = Items.query.get(item_id)
+        if not item:
+            return jsonify({'error': 'Item not found'}), 404
+        
+        if item.user_id != user.id:
+            return jsonify({'error': 'You are not authorized to modify this item'}), 403
+
+        data = request.json
+        if not data or 'photos' not in data:
+            return jsonify({'error': 'No photo data provided'}), 400
+
+        # Update photo order and main photo
+        for photo_data in data['photos']:
+            photo = Photo.query.get(photo_data['id'])
+            if photo and photo.item_id == item_id:
+                photo.display_order = photo_data.get('display_order', 0)
+                photo.is_main = photo_data.get('is_main', False)
+
+        db.session.commit()
+
+        return jsonify({'message': 'Photos reordered successfully'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Reorder failed: {str(e)}'}), 500
 

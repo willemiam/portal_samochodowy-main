@@ -4,6 +4,7 @@
     import { isAuthenticated, user } from "../stores/store.ts";
     import auth from "../authService.ts";
       let formPhotos = [];
+    let photoGridRef;
     let make = "";
     let model = "";
     let year = "";
@@ -16,7 +17,7 @@
     let doors = "";
     let transmission = "";
     let drive_type = "";
-    let customFeatures = ""; // New field for user-defined features
+    let customFeatures = ""; 
     
     let makes = [];
     let models = [];
@@ -24,10 +25,10 @@
     let descriptionRef;    let isSubmitting = false;
     let isGeneratingDescription = false;
     let submitError = "";
-    let submitSuccess = false;    // Authentication state
+    let submitSuccess = false;    
     let isAuthenticatedValue = false;
     let userValue = null;
-      // Subscribe to authentication stores with enhanced debugging
+
     isAuthenticated.subscribe(value => {
         console.log('🔐 Authentication state changed in addItem:', value);
         console.log('📊 Previous auth state:', isAuthenticatedValue, '→ New state:', value);
@@ -53,7 +54,6 @@
         } catch (error) {
             console.error('Error loading makes:', error);
             submitError = `Error loading car makes: ${error.message}`;
-            // Fallback to test data if API fails
             makes = ['BMW', 'Audi', 'Ford', 'Toyota', 'Mercedes-Benz'];
         }
     }
@@ -70,14 +70,29 @@
         }
         model = "";
     }    export async function generateDescription(carData) {
-        console.log('🔗 Making HTTP request to AI service...');
+        console.log('🔗 Making HTTP request to authenticated AI service...');
         console.log('📤 Request payload:', JSON.stringify(carData, null, 2));
         
+        // Get user's Auth0 token for authentication
+        const userToken = await auth.getAccessToken();
+        
+        if (!userToken) {
+            throw new Error('Musisz być zalogowany, aby użyć generatora opisu AI');
+        }
+        
+        // Get AI service URL from environment or use localhost fallback
+        const AI_SERVICE_URL = import.meta.env.VITE_AI_SERVICE_URL || "http://localhost:8000";
+        console.log('⚙️ AI service endpoint:', `${AI_SERVICE_URL}/enhance-description`);
+        console.log('🔐 Using authenticated request with user token');
+        
         const response = await fetch(
-            "http://localhost:8000/enhance-description",
+            `${AI_SERVICE_URL}/enhance-description`,
             {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { 
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${userToken}`  // Send user's JWT token for authentication
+                },
                 body: JSON.stringify(carData),
             },
         );
@@ -88,11 +103,21 @@
         if (!response.ok) {
             const errorText = await response.text();
             console.error('❌ AI service error response:', errorText);
-            throw new Error(`Błąd serwera AI (${response.status}): ${errorText}`);
+            
+            if (response.status === 401) {
+                throw new Error('Błąd uwierzytelniania. Zaloguj się ponownie.');
+            } else if (response.status === 429) {
+                throw new Error('Zbyt wiele żądań. Poczekaj przed wygenerowaniem kolejnego opisu.');
+            } else if (response.status === 403) {
+                throw new Error('Brak uprawnień do korzystania z usługi AI.');
+            } else {
+                throw new Error(`Błąd serwera AI (${response.status}): ${errorText}`);
+            }
         }
         
         const data = await response.json();
         console.log('✅ AI service response data:', data);
+        console.log('👤 Description generated for user:', data.user_email || 'authenticated user');
         
         return data.description;
     }
@@ -100,22 +125,25 @@
     async function handleGenerateDescription(event) {
         event.preventDefault();
         
-        // Validate required fields for AI description generation
+        // Check authentication first
+        if (!isAuthenticatedValue) {
+            submitError = "Musisz być zalogowany, aby korzystać z generatora opisu AI";
+            return;
+        }
+        
         if (!make || !model || !year) {
             submitError = "Wypełnij markę, model i rok aby wygenerować opis AI";
             return;
         }
         
-        // Prepare CarData according to FastAPI schema
         const carData = {
             make: make,
             model: model,
             year: parseInt(year),
             mileage: car_mileage ? parseInt(car_mileage) : 0,
             features: [],
-            condition: "good" // Default condition
+            condition: "good" 
         };
-          // Add features based on available form data
         if (fuel_type) carData.features.push(`Paliwo: ${fuel_type}`);
         if (engine_displacement) carData.features.push(`Pojemność: ${engine_displacement}L`);
         if (car_size_class) carData.features.push(`Typ: ${car_size_class}`);
@@ -124,15 +152,13 @@
         if (doors) carData.features.push(`${doors} drzwi`);
         if (color) carData.features.push(`Kolor: ${color}`);
         
-        // Add custom features if provided
         if (customFeatures && customFeatures.trim()) {
-            // Split custom features by commas and add each as a separate feature
             const customFeaturesArray = customFeatures
                 .split(',')
                 .map(feature => feature.trim())
                 .filter(feature => feature.length > 0);
             carData.features.push(...customFeaturesArray);
-        }// Determine condition based on mileage and year
+        }
         if (car_mileage && year) {
             const currentYear = new Date().getFullYear();
             const carAge = currentYear - parseInt(year);
@@ -153,7 +179,6 @@
         try {
             isGeneratingDescription = true;
             
-            // Console logging for debugging
             console.log('🚀 Starting AI description generation...');
             console.log('📊 Car data being sent to AI service:', JSON.stringify(carData, null, 2));
             console.log('🎯 Features array length:', carData.features.length);
@@ -171,7 +196,7 @@
             if (descriptionRef) {
                 descriptionRef.value = description;
             }
-            submitError = ""; // Clear any previous errors
+            submitError = ""; 
         } catch (e) {
             console.error('❌ Error generating AI description:', e);
             console.log('🔍 Error details:', {
@@ -180,15 +205,25 @@
                 carData: carData
             });
             
-            // Check if it's a network error (AI service unavailable)
-            if (e.message.includes('fetch')) {
+            if (e.message.includes('zalogowany') || e.message.includes('uwierzytelniania')) {
+                console.log('🔐 Authentication error detected');
+                submitError = e.message;
+                // Prompt user to login again
+                if (e.message.includes('zaloguj się ponownie')) {
+                    setTimeout(() => {
+                        auth.loginWithPopup();
+                    }, 2000);
+                }
+            } else if (e.message.includes('fetch')) {
                 console.log('🌐 Network error detected - AI service may be down');
-                submitError = "Serwis AI jest niedostępny. Sprawdź czy działa na porcie 8000.";
+                submitError = "Serwis AI jest niedostępny. Sprawdź połączenie internetowe.";
+            } else if (e.message.includes('żądań')) {
+                console.log('⏱️ Rate limit error detected');
+                submitError = e.message;
             } else {
                 console.log('⚠️ AI service error:', e.message);
                 submitError = `Błąd generowania opisu AI: ${e.message}`;
             }
-              // Don't overwrite existing description on error
             if (descriptionRef && !descriptionRef.value) {
                 descriptionRef.value = "Wystąpił błąd podczas generowania opisu AI - napisz opis ręcznie.";
             }
@@ -198,17 +233,14 @@
         }
     }    async function handleSubmit(event) {
         event.preventDefault();
-          // Reset previous states
         submitError = "";
         submitSuccess = false;
-          // Check authentication status
         if (!isAuthenticatedValue) {
             submitError = "Musisz być zalogowany, aby dodać ogłoszenie";
             return;
         }
         
-        // Validate required fields
-        if (!make || !model || !year || !price || !car_mileage || !color || !descriptionRef?.value) {
+        if (!make || !model || !year || !price || !car_mileage || !descriptionRef?.value) {
             submitError = "Wypełnij wszystkie wymagane pola";
             return;
         }
@@ -217,7 +249,6 @@
 
         try {
             const itemData = {
-                // user_id is now extracted from JWT token on backend
                 make,
                 model,
                 year: parseInt(year),
@@ -233,10 +264,32 @@
                 drive_type: drive_type || null
             };
 
-            await createItem(itemData);
+            // Create the item first
+            const createdItem = await createItem(itemData);
+            
+            // Upload photos if any exist
+            if (photoGridRef && createdItem && createdItem.id) {
+                const photosData = photoGridRef.getPhotosData();
+                
+                if (photosData.length > 0) {
+                    const response = await fetch(`/api/items/${createdItem.id}/photos`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+                        },
+                        body: JSON.stringify({ photos: photosData })
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        console.warn('Photo upload failed:', errorData.error);
+                        // Don't fail the whole process if photos fail
+                    }
+                }
+            }
             submitSuccess = true;
             
-            // Reset form
             make = "";
             model = "";
             year = "";
@@ -417,12 +470,15 @@
             
             <div class="ai-generation-section">
                 <p class="ai-hint">💡 Wypełnij markę, model i rok, aby wygenerować opis przy pomocy AI</p>
-                <button type="button" class="auction-btn" on:click={handleGenerateDescription} disabled={isGeneratingDescription || !make || !model || !year}>
-                    {isGeneratingDescription ? 'Generuję opis...' : 'Generuj opis AI'}
+                <button type="button" class="auction-btn" on:click={handleGenerateDescription} disabled={isGeneratingDescription || !make || !model || !year || !isAuthenticatedValue}>
+                    {isGeneratingDescription ? 'Generuję opis...' : !isAuthenticatedValue ? 'Zaloguj się, aby użyć AI' : 'Generuj opis AI'}
                 </button>
+                {#if !isAuthenticatedValue}
+                    <p class="auth-hint">🔐 Musisz być zalogowany, aby korzystać z generatora opisu AI</p>
+                {/if}
             </div>
             
-            <PhotoGrid />            <button type="submit" class="auction-btn" id="add-item-btn" disabled={isSubmitting}>
+            <PhotoGrid bind:this={photoGridRef} />            <button type="submit" class="auction-btn" id="add-item-btn" disabled={isSubmitting}>
                 {isSubmitting ? 'Dodawanie...' : 'Dodaj ogłoszenie'}
             </button>
         </form>
@@ -559,6 +615,15 @@
         margin: 0;
         text-align: center;
         font-style: italic;
+    }
+    
+    .auth-hint {
+        color: #dc3545;
+        font-size: 0.85rem;
+        margin: 0.5rem 0 0 0;
+        text-align: center;
+        font-style: italic;
+        font-weight: 500;
     }
     
     .auction-btn {
