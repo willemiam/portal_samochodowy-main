@@ -24,49 +24,58 @@ export async function fetchItems() {
 }
 
 // Filtrowanie ogłoszeń
-export async function filterItems(make, model, year) {
+export async function filterItems(filters) {
   const url = new URL(`${API_URL}/api/items/filter`);
-  if (make) url.searchParams.append('make', make);
-  if (model) url.searchParams.append('model', model);
-  if (year) url.searchParams.append('year', year);
+  for (const key in filters) {
+    if (filters[key]) {
+      url.searchParams.append(key, filters[key]);
+    }
+  }
 
   const response = await fetch(url);
   return await response.json();
 }
 
-// Pobranie listy unikalnych marek
-export async function fetchMakes() {
+// Pobranie wszystkich kategorii
+export async function fetchCategories() {
   try {
-    const response = await fetch(`${API_URL}/api/cars/makes`);
+    const response = await fetch(`${API_URL}/api/categories`);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    const makes = await response.json();
-    console.log('API response for makes:', makes);
-    return makes;
+    const categories = await response.json();
+    console.log('API response for categories:', categories);
+    return categories;
   } catch (error) {
-    console.error('Error fetching makes:', error);
+    console.error('Error fetching categories:', error);
     throw error;
   }
 }
 
-// Pobranie listy modeli dla danej marki
-export async function fetchModels(make) {
-  const response = await fetch(`${API_URL}/api/cars/models?make=${encodeURIComponent(make)}`);
-  return await response.json();
+// Pobranie schematu kategorii
+export async function fetchCategorySchema(categoryId) {
+  try {
+    const response = await fetch(`${API_URL}/api/categories/${categoryId}/schema`);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const schema = await response.json();
+    console.log('API response for schema:', schema);
+    return schema;
+  } catch (error) {
+    console.error('Error fetching schema:', error);
+    throw error;
+  }
 }
 
 // Tworzenie nowego ogłoszenia
 export async function createItem(itemData) {
   const headers = await getAuthHeaders();
   
-  // Remove user_id from itemData since it comes from auth token
-  const { user_id, ...cleanItemData } = itemData;
-  
   const response = await fetch(`${API_URL}/api/items`, {
     method: 'POST',
     headers,
-    body: JSON.stringify(cleanItemData),
+    body: JSON.stringify(itemData),
   });
   
   if (!response.ok) {

@@ -12,6 +12,8 @@
   import AddItem from "./routes/addItem.svelte";
   import Filter from "./routes/filter.svelte";
   import Footer from "./components/Footer.svelte";
+  import Categories from "./routes/categories.svelte";
+  import { navigate } from 'svelte-routing';
 
   export let url = "";
   onMount(async () => {
@@ -21,9 +23,12 @@
 
 <Router {url}>
   <div class="app">
-    <Navbar />    <main>
+    <Navbar />
+    <main>
       <Route path="/" component={Home} />
-      <Route path="/addItem" component={AddItem} />
+      <Route path="/add-item/:category_id" component={AddItem} />
+      <Route path="/add-item" component={() => { navigate('/categories'); return null; }} />
+      <Route path="/categories" component={Categories} />
       <Route path="/account" component={Account} />
       <Route path="/filter" component={Filter} />
     </main>
