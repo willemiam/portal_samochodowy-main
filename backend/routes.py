@@ -2,7 +2,7 @@ from flask import Flask, jsonify, request
 from werkzeug.security import generate_password_hash
 from app import app, db
 from models import *
-from models import Car, Photo
+from models import Photo
 from auth_middleware import requires_auth, requires_auth_optional
 from services.storage_service import storage_service
 
@@ -92,51 +92,22 @@ def delete_user(user_id):
 def create_item():
     try:
         data = request.json
-        user = request.current_user  
-        
-        required_fields = ['make', 'model', 'year', 'price', 'car_mileage', 'color', 'description']
+        user = request.current_user
+
+        required_fields = ['price', 'description', 'attributes', 'category_id']
         for field in required_fields:
             if field not in data:
                 return jsonify({'error': f'Input required field {field}'}), 400
 
-        # Remove user_id from required fields since we get it from auth
         user_id = user.id
-        make = data.get('make')
-        model = data.get('model')
-        year = data.get('year')
         price = data.get('price')
-        car_mileage = data.get('car_mileage')
-        color = data.get('color')
         description = data.get('description')
+        attributes = data.get('attributes')
+        category_id = data.get('category_id')
 
-        # Sprawdzamy, czy samochód już istnieje w bazie (np. marka + model + rok)
-        existing_car = Car.query.filter_by(make=make, model=model, year=year).first()
-
-        if not existing_car:
-            # Tworzymy nowy samochód
-            new_car = Car()
-            new_car.make = make
-            new_car.model = model
-            new_car.year = year
-            new_car.fuel_type = data.get('fuel_type')
-            new_car.engine_displacement = data.get('engine_displacement')
-            new_car.car_size_class = data.get('car_size_class')
-            new_car.doors = data.get('doors')
-            new_car.transmission = data.get('transmission')
-            new_car.drive_type = data.get('drive_type')
-            db.session.add(new_car)
-            db.session.commit()
-            car_id = new_car.id
-        else:
-            car_id = existing_car.id        # Tworzymy ogłoszenie
-        attributes = {
-            'car_mileage': car_mileage,
-            'color': color
-        }
-        
         new_item = Items(
             user_id=user_id,
-            car_id=car_id,
+            category_id=category_id,
             price=price,
             description=description,
             attributes=attributes
@@ -154,27 +125,8 @@ def create_item():
 #Zwraca wszystkie ogłoszenie
 @app.route('/api/items', methods=['GET'])
 def get_all_items():
-    items = db.session.query(Items, Car).join(Car, Items.car_id == Car.id).all()
-
-    result = []
-    for item, car in items:
-        car_mileage = item.attributes.get('car_mileage') if item.attributes else None
-        color = item.attributes.get('color') if item.attributes else None
-        
-        result.append({
-            "id": item.id,
-            "userId": item.user_id,
-            "carId": item.car_id,
-            "make": car.make,
-            "model": car.model,
-            "year": car.year,
-            "price": item.price,
-            "carMileage": car_mileage,
-            "color": color,
-            "description": item.description,
-            "createdAt": item.created_at.strftime("%Y-%m-%d %H:%M:%S")
-        })
-
+    items = Items.query.all()
+    result = [item.to_json() for item in items]
     return jsonify(result), 200
 
 
@@ -199,18 +151,15 @@ def update_item(item_id):
 
     # Sprawdzamy, czy użytkownik jest właścicielem ogłoszenia
     if item.user_id != user.id:
-        return jsonify({'error': 'You are not authorized to edit this item'}), 403    # Aktualizacja danych (tylko wybrane pola)
+        return jsonify({'error': 'You are not authorized to edit this item'}), 403
+        
+    # Aktualizacja danych (tylko wybrane pola)
     if 'price' in data:
         item.price = data['price']
-    if 'car_mileage' in data or 'color' in data:
-        if not item.attributes:
-            item.attributes = {}
-        if 'car_mileage' in data:
-            item.attributes['car_mileage'] = data['car_mileage']
-        if 'color' in data:
-            item.attributes['color'] = data['color']
     if 'description' in data:
         item.description = data['description']
+    if 'attributes' in data:
+        item.attributes = data['attributes']
 
     db.session.commit()
     return jsonify({'message': 'Item updated successfully', 'item': item.to_json()}), 200
@@ -238,68 +187,43 @@ def delete_item(item_id):
 #Zwraca ogłoszenia według ustawionych filtrów
 @app.route('/api/items/filter', methods=['GET'])
 def filter_items():
-    make = request.args.get('make')
-    model = request.args.get('model')
-    year = request.args.get('year')
+    category_id = request.args.get('category_id')
+    
+    query = Items.query
 
-    # Łączymy Items z Car, aby uzyskać więcej danych
-    query = db.session.query(Items, Car).join(Car, Items.car_id == Car.id)
+    if category_id:
+        query = query.filter(Items.category_id == category_id)
 
-    # Filtry
-    if make:
-        query = query.filter(Car.make.ilike(f"%{make}%"))
-    if model:
-        query = query.filter(Car.model.ilike(f"%{model}%"))
-    if year:
-        try:
-            year = int(year)
-            query = query.filter(Car.year == year)
-        except ValueError:
-            return jsonify({"error": "Invalid year format"}), 400
+    # Dynamic filtering based on attributes
+    for key, value in request.args.items():
+        if key not in ['category_id']:
+            query = query.filter(db.func.json_extract(Items.attributes, f'$.{key}') == value)
 
     filtered_items = query.all()
 
-    result = []
-    for item, car in filtered_items:
-        car_mileage = item.attributes.get('car_mileage') if item.attributes else None
-        color = item.attributes.get('color') if item.attributes else None
-        
-        result.append({
-            "id": item.id,
-            "userId": item.user_id,
-            "carId": item.car_id,
-            "make": car.make,
-            "model": car.model,
-            "year": car.year,
-            "fuelType": car.fuel_type,
-            "engineDisplacement": car.engine_displacement,
-            "carSizeClass": car.car_size_class,
-            "price": item.price,
-            "carMileage": car_mileage,
-            "color": color,
-            "description": item.description,
-            "createdAt": item.created_at.strftime("%Y-%m-%d %H:%M:%S")
-        })
-
+    result = [item.to_json() for item in filtered_items]
     return jsonify(result), 200
 
 
+@app.route('/api/categories', methods=['GET'])
+def get_categories():
+    categories = Category.query.all()
+    result = [category.to_json() for category in categories]
+    return jsonify(result), 200
 
-# Pobranie unikalnych marek samochodów
-@app.route('/api/cars/makes', methods=['GET'])
-def get_makes():
-    makes = db.session.query(Car.make).distinct().all()
-    return jsonify([make[0] for make in makes]), 200
 
-# Pobranie modeli na podstawie marki
-@app.route('/api/cars/models', methods=['GET'])
-def get_models():
-    make = request.args.get('make')
-    if not make:
-        return jsonify({'error': 'Make is required'}), 400
-
-    models = db.session.query(Car.model).filter(Car.make == make).distinct().order_by(Car.model).all()
-    return jsonify([model[0] for model in models]), 200
+@app.route('/api/categories/<int:category_id>/schema', methods=['GET'])
+def get_category_schema(category_id):
+    category = Category.query.get(category_id)
+    if not category:
+        return jsonify({'error': 'Category not found'}), 404
+    
+    schema = CategorySchema.query.filter_by(category_id=category_id).order_by(CategorySchema.display_order).all()
+    
+    return jsonify({
+        'category': category.to_json(),
+        'schema': [s.to_json() for s in schema]
+    }), 200
 
 # Photo upload endpoint
 @app.route('/api/photos/upload', methods=['POST'])
