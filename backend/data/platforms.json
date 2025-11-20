@@ -1,0 +1,78 @@
+{
+  "c3cdbad9-fd13-494a-9b0d-c86b19175677": {
+    "id": "c3cdbad9-fd13-494a-9b0d-c86b19175677",
+    "platform_config": {
+      "name": "Test Platform",
+      "description": "A test platform",
+      "domain": "automotive",
+      "features": {
+        "search": true,
+        "filters": true,
+        "aiEnhancement": true,
+        "userAccounts": false
+      },
+      "domainDetails": {
+        "itemName": "Car",
+        "itemNamePlural": "Cars",
+        "primaryFields": [
+          "make",
+          "model",
+          "year"
+        ]
+      },
+      "advanced": {
+        "mcpEndpoint": "",
+        "apiKey": "",
+        "customPrompt": ""
+      }
+    },
+    "created_at": "2025-11-20T15:05:29.956054",
+    "updated_at": "2025-11-20T15:05:46.405303",
+    "previews": [
+      {
+        "id": "debda1af-d216-4aa1-bd23-774cd24695bc",
+        "enhanced_text": "[MOCK MCP RESPONSE] Enhanced description for automotive item. Item details: make: Toyota, model: Camry, year: 2023, color: Blue. This is a simulated AI-enhanced description that would normally come from a Model Context Protocol endpoint. The actual implementation would connect to a real MCP service to generate contextually relevant, enhanced descriptions based on the domain and item data provided.",
+        "sources": [],
+        "session_id": "d638f1a3-192b-41e4-a768-8387bbdec315",
+        "created_at": "2025-11-20T15:05:46.405292",
+        "domain": "automotive",
+        "item_data": {
+          "make": "Toyota",
+          "model": "Camry",
+          "year": "2023",
+          "color": "Blue"
+        }
+      }
+    ]
+  },
+  "3b67469c-daca-4687-8cd1-8cf0af312c4c": {
+    "id": "3b67469c-daca-4687-8cd1-8cf0af312c4c",
+    "platform_config": {
+      "name": "Car Marketplace",
+      "description": "",
+      "domain": "automotive",
+      "features": {
+        "search": true,
+        "filters": true,
+        "aiEnhancement": true,
+        "userAccounts": false
+      },
+      "domainDetails": {
+        "itemName": "Car",
+        "itemNamePlural": "Cars",
+        "primaryFields": [
+          "make",
+          "model"
+        ]
+      },
+      "advanced": {
+        "mcpEndpoint": "",
+        "apiKey": "",
+        "customPrompt": ""
+      }
+    },
+    "created_at": "2025-11-20T15:10:03.928760",
+    "updated_at": "2025-11-20T15:10:03.928771",
+    "previews": []
+  }
+}

@@ -30,6 +30,9 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# But allow frontend source lib directory
+!frontend/src/lib/
+
 # SQLite database files
 backend/*.db
 backend/instance/

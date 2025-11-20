@@ -56,6 +56,10 @@ def init_database():
 
 
 if __name__ == '__main__':
+    # Register platform creator blueprint
+    from services.platforms import platforms_bp
+    app.register_blueprint(platforms_bp)
+    
     init_database()
     app.run(debug=True, host='0.0.0.0', port=5000)
 
