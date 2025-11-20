@@ -27,6 +27,11 @@ db = SQLAlchemy(app)
 
 from routes import *
 
+# Register blueprints after routes are loaded (only once)
+if 'platforms' not in [bp.name for bp in app.blueprints.values()]:
+    from services.platforms import platforms_bp
+    app.register_blueprint(platforms_bp)
+
 def init_database():
     """Initialize database and load CSV data"""
     with app.app_context():
