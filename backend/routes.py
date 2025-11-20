@@ -479,3 +479,70 @@ def reorder_photos(item_id):
         db.session.rollback()
         return jsonify({'error': f'Reorder failed: {str(e)}'}), 500
 
+
+# PLATFORM CREATOR ENDPOINTS
+
+from services.platforms import create_platform, get_platform, generate_preview
+
+@app.route('/api/platforms', methods=['POST'])
+def create_platform_endpoint():
+    """Create a new platform configuration"""
+    try:
+        data = request.json
+        
+        if not data or 'config' not in data:
+            return jsonify({'error': 'Platform config is required'}), 400
+        
+        platform = create_platform(data['config'])
+        
+        return jsonify({
+            'id': platform['id'],
+            'config': platform['config'],
+            'created_at': platform['created_at']
+        }), 201
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to create platform: {str(e)}'}), 500
+
+
+@app.route('/api/platforms/<platform_id>', methods=['GET'])
+def get_platform_endpoint(platform_id):
+    """Get a platform configuration by ID"""
+    try:
+        platform = get_platform(platform_id)
+        
+        if not platform:
+            return jsonify({'error': 'Platform not found'}), 404
+        
+        return jsonify({
+            'id': platform['id'],
+            'config': platform['config'],
+            'created_at': platform['created_at']
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': f'Failed to fetch platform: {str(e)}'}), 500
+
+
+@app.route('/api/platforms/<platform_id>/preview', methods=['POST'])
+def preview_platform_endpoint(platform_id):
+    """Generate a mock preview for a platform"""
+    try:
+        data = request.json
+        
+        if not data or 'domain' not in data or 'item_data' not in data:
+            return jsonify({'error': 'domain and item_data are required'}), 400
+        
+        domain = data['domain']
+        item_data = data['item_data']
+        
+        preview_result = generate_preview(platform_id, domain, item_data)
+        
+        return jsonify(preview_result), 200
+        
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 404
+    except Exception as e:
+        return jsonify({'error': f'Failed to generate preview: {str(e)}'}), 500
+
+
