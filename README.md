@@ -1,5 +1,6 @@
 # Portal Samochodowy
 
+
 This project is a full-stack web application for managing car listings. It consists of a Svelte (Vite) frontend, a Flask backend with a SQLite database, and an optional AI enhancement microservice. All services are containerized and orchestrated using Docker Compose for easy local development.
 
 ## Features
