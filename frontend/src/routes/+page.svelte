@@ -1,6 +1,6 @@
 <script>
-    import CreatorWizard from "./lib/components/CreatorWizard.svelte";
-    import "./app.css";
+    import CreatorWizard from "$lib/components/CreatorWizard.svelte";
+    import "../app.css";
 </script>
 
 <svelte:head>
