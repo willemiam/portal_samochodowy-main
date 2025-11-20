@@ -25,8 +25,6 @@ app.config['DISABLE_AUTH'] = os.environ.get('DISABLE_AUTH', 'True').lower() == '
 
 db = SQLAlchemy(app)
 
-from routes import *
-
 def init_database():
     """Initialize database and load CSV data"""
     with app.app_context():
