@@ -1,0 +1,32 @@
+{
+  "54655e48-d85c-4338-bde2-554c8bcc1da9": {
+    "id": "54655e48-d85c-4338-bde2-554c8bcc1da9",
+    "data": {
+      "name": "Test Platform",
+      "description": "A test automotive platform",
+      "domain": "automotive",
+      "features": [
+        "search",
+        "filters"
+      ],
+      "targetAudience": "Car buyers",
+      "primaryGoals": [
+        "Increase engagement"
+      ],
+      "customSettings": {
+        "max_results": "50"
+      }
+    },
+    "previews": [
+      {
+        "id": "5fd30d81-b594-48c4-ad89-e42a0ecf43c6",
+        "platform_id": "54655e48-d85c-4338-bde2-554c8bcc1da9",
+        "enhanced_text": "# Platform Preview: Test Platform\n\n## Overview\nThis is a mock preview for the Test Platform platform in the automotive domain.\n\n## Features\nThe platform has been configured with the following capabilities:\n- Enhanced AI processing\n- Real-time data analysis\n- Custom domain integration\n\n## Status\nPreview generated successfully. This is a placeholder for actual AI-enhanced content.",
+        "sources": [],
+        "session_id": "a356f0b0-6eef-4fee-bf17-bf0b22d37a88",
+        "created_at": "2025-11-20T15:02:32.284793"
+      }
+    ],
+    "created_at": "2025-11-20T15:02:18.081175"
+  }
+}
