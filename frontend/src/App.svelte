@@ -11,6 +11,7 @@
   import Account from "./routes/account.svelte";
   import AddItem from "./routes/addItem.svelte";
   import Filter from "./routes/filter.svelte";
+  import PlatformCreator from "./routes/platformCreator.svelte";
   import Footer from "./components/Footer.svelte";
 
   export let url = "";
@@ -26,6 +27,7 @@
       <Route path="/addItem" component={AddItem} />
       <Route path="/account" component={Account} />
       <Route path="/filter" component={Filter} />
+      <Route path="/platform-creator" component={PlatformCreator} />
     </main>
 
     <Footer />

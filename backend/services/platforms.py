@@ -4,7 +4,7 @@ import os
 import uuid
 from datetime import datetime
 
-platforms_bp = Blueprint('platforms', __name__)
+platforms_bp = Blueprint('platform_creator', __name__)
 
 # Path to platforms storage file
 PLATFORMS_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'platforms.json')

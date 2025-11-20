@@ -1,27 +1,24 @@
 <script lang="ts">
   import { wizardStore } from '../stores/wizardStore';
-  import { previewPlatform } from '../lib/api/platform';
+  import { previewPlatform } from '../api/platform';
 
   let state = $state($wizardStore);
-  let previewData = $state({
-    domain: '',
-    item_data: {} as Record<string, any>
+  
+  // Use $derived to compute preview data based on current state
+  let previewData = $derived({
+    domain: state.platformConfig.domain,
+    item_data: state.platformConfig.domainDetails.primaryFields.reduce((acc, field, index) => {
+      acc[field] = `Sample ${field} value ${index + 1}`;
+      return acc;
+    }, {} as Record<string, any>)
   });
+  
   let previewResult = $state<any>(null);
   let isLoadingPreview = $state(false);
   let previewError = $state<string | null>(null);
 
   $effect(() => {
     state = $wizardStore;
-    // Initialize preview data with platform config
-    previewData.domain = state.platformConfig.domain;
-    
-    // Create sample item data based on primary fields
-    const sampleData: Record<string, any> = {};
-    state.platformConfig.domainDetails.primaryFields.forEach((field, index) => {
-      sampleData[field] = `Sample ${field} value ${index + 1}`;
-    });
-    previewData.item_data = sampleData;
   });
 
   async function handlePreview() {
