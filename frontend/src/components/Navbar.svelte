@@ -1,23 +1,8 @@
 <script>
     import { Link } from "svelte-routing";
-    import { isAuthenticated, user } from "../stores/store";
-    import auth from "../authService";
-
-    async function handleLogin() {
-        await auth.loginWithPopup();
-    }
-
-    async function handleLogout() {
-        await auth.logout();
-    }
 </script>
 
 <header>
-    {#if $isAuthenticated}
-        <span class="text-white"
-            >&nbsp;&nbsp;{$user.name || $user.nickname || $user.email}
-        </span>
-    {:else}<span>&nbsp;</span>{/if}
     <div class="container">
         <nav>
             <Link to="/" class="logo">
@@ -44,35 +29,15 @@
                         stroke-width="2"
                     />
                 </svg>
-                <span>BEST CARS</span>
-            </Link>            <div class="nav-links">
+                <span>A/B Testing</span>
+            </Link>
+            <div class="nav-links">
                 <li>
-                    <Link to="/" class="nav-link">Start</Link>
+                    <Link to="/" class="nav-link">Dashboard</Link>
                 </li>
                 <li>
-                    <Link to="/addItem" class="nav-link">Dodaj ogłoszenie</Link>
+                    <Link to="/experiments" class="nav-link">Experiments</Link>
                 </li>
-                <li>
-                    <Link to="/filter" class="nav-link">Filtruj Ogłoszenia</Link>
-                </li>
-
-                {#if $isAuthenticated}
-                    <li class="nav-item">
-                        <a
-                            class="nav-link"
-                            href="/#"
-                            on:click|preventDefault={handleLogout}>Log Out</a
-                        >
-                    </li>
-                {:else}
-                    <li class="nav-item">
-                        <a
-                            class="nav-link"
-                            href="/#"
-                            on:click|preventDefault={handleLogin}>Log In</a
-                        >
-                    </li>
-                {/if}
             </div>
         </nav>
     </div>
