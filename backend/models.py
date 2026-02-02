@@ -213,3 +213,129 @@ class Photo(db.Model):
             'storageType': self.storage_type,
             'createdAt': self.created_at.strftime("%Y-%m-%d %H:%M:%S")
         }
+
+
+# ============================================================================
+# A/B TESTING MODELS (Bachelor's Thesis - LLM Comparison Framework)
+# ============================================================================
+
+class Experiment(db.Model):
+    __tablename__ = 'experiments'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text)
+    models = db.Column(JSON, nullable=False)  # List of models: ["bielik-1.5b-gguf", "bielik-11b-gguf", "llama-3.1-8b"]
+    parameters = db.Column(JSON)  # Shared experiment parameters: {temperature, max_tokens, grammar_enabled, etc.}
+    test_ads = db.Column(JSON, nullable=False)  # List of test ad IDs to use
+    status = db.Column(db.String(20), default='pending', nullable=False)  # pending, running, completed, failed
+    total_runs = db.Column(db.Integer, default=0)
+    completed_runs = db.Column(db.Integer, default=0)
+    failed_runs = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    started_at = db.Column(db.DateTime)
+    completed_at = db.Column(db.DateTime)
+    notes = db.Column(db.Text)  # Research notes
+
+    # Relationships
+    runs = db.relationship('ExperimentRun', backref='experiment', lazy=True, cascade="all, delete")
+    evaluations = db.relationship('QualityEvaluation', backref='experiment', lazy=True, cascade="all, delete")
+
+    def to_json(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'models': self.models,
+            'parameters': self.parameters,
+            'testAds': self.test_ads,
+            'status': self.status,
+            'totalRuns': self.total_runs,
+            'completedRuns': self.completed_runs,
+            'failedRuns': self.failed_runs,
+            'createdAt': self.created_at.strftime("%Y-%m-%d %H:%M:%S") if self.created_at else None,
+            'startedAt': self.started_at.strftime("%Y-%m-%d %H:%M:%S") if self.started_at else None,
+            'completedAt': self.completed_at.strftime("%Y-%m-%d %H:%M:%S") if self.completed_at else None,
+            'notes': self.notes
+        }
+
+
+class ExperimentRun(db.Model):
+    __tablename__ = 'experiment_runs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    experiment_id = db.Column(db.Integer, db.ForeignKey('experiments.id'), nullable=False)
+    model_name = db.Column(db.String(100), nullable=False)  # Which model was used
+    ad_id = db.Column(db.Integer, nullable=False)  # Reference to Items.id (test ad)
+    original_text = db.Column(db.Text, nullable=False)  # Original ad with gaps
+    filled_text = db.Column(db.Text)  # LLM output
+    gap_fills = db.Column(JSON)  # Per-gap results: {1: {choice: "word", alternatives: [...]}, 2: {...}}
+    
+    # Metrics (calculated by metrics.py module)
+    semantic_score = db.Column(db.Float)  # 0-1, word embedding similarity
+    domain_relevance_score = db.Column(db.Float)  # 0-1, car vocabulary check
+    grammar_score = db.Column(db.Float)  # 0-1, Polish case correctness
+    overall_score = db.Column(db.Float)  # 0-1, weighted average
+    
+    # Execution details
+    generation_time = db.Column(db.Float)  # Seconds
+    status = db.Column(db.String(20), default='success', nullable=False)  # success, error, invalid_output
+    error_message = db.Column(db.Text)  # If status = error
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_json(self):
+        return {
+            'id': self.id,
+            'experimentId': self.experiment_id,
+            'modelName': self.model_name,
+            'adId': self.ad_id,
+            'originalText': self.original_text,
+            'filledText': self.filled_text,
+            'gapFills': self.gap_fills,
+            'semanticScore': self.semantic_score,
+            'domainRelevanceScore': self.domain_relevance_score,
+            'grammarScore': self.grammar_score,
+            'overallScore': self.overall_score,
+            'generationTime': self.generation_time,
+            'status': self.status,
+            'errorMessage': self.error_message,
+            'createdAt': self.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+
+class QualityEvaluation(db.Model):
+    __tablename__ = 'quality_evaluations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    experiment_id = db.Column(db.Integer, db.ForeignKey('experiments.id'), nullable=False)
+    run_id = db.Column(db.Integer, db.ForeignKey('experiment_runs.id'), nullable=False)
+    
+    # Human evaluation (optional, for validation)
+    human_rating = db.Column(db.Integer)  # 1-5 star rating
+    human_notes = db.Column(db.Text)  # Evaluator feedback
+    
+    # Gap-specific feedback
+    gap_feedback = db.Column(JSON)  # Per-gap human judgment: {1: "correct", 2: "incorrect", 3: "acceptable"}
+    
+    # Validation flags
+    is_valid = db.Column(db.Boolean, default=True)  # JSON valid, all gaps filled
+    has_errors = db.Column(db.Boolean, default=False)  # Parsing errors
+    error_details = db.Column(db.Text)
+    
+    evaluated_by = db.Column(db.String(100))  # Email or user identifier
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_json(self):
+        return {
+            'id': self.id,
+            'experimentId': self.experiment_id,
+            'runId': self.run_id,
+            'humanRating': self.human_rating,
+            'humanNotes': self.human_notes,
+            'gapFeedback': self.gap_feedback,
+            'isValid': self.is_valid,
+            'hasErrors': self.has_errors,
+            'errorDetails': self.error_details,
+            'evaluatedBy': self.evaluated_by,
+            'createdAt': self.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        }
