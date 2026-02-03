@@ -797,3 +797,35 @@ def experiment_evaluations(experiment_id):
         return jsonify({'error': str(e)}), 500
 
 
+# Available LLM models endpoint
+@app.route('/api/models', methods=['GET'])
+def get_available_models():
+    """Get list of available models from Bielik service"""
+    try:
+        BIELIK_API_URL = os.environ.get('BIELIK_APP_URL', 'http://localhost:8000')
+        
+        # Try to get from Bielik service
+        response = requests.get(f'{BIELIK_API_URL}/models', timeout=5)
+        
+        if response.status_code == 200:
+            models = response.json()
+            return jsonify([{'name': m.get('name', m) if isinstance(m, dict) else m} for m in models]), 200
+        
+        # Fallback if service not available
+        fallback_models = [
+            'bielik-1.5b-gguf',
+            'bielik-11b-gguf',
+            'llama-3.1-8b'
+        ]
+        return jsonify([{'name': m} for m in fallback_models]), 200
+    
+    except:
+        # Fallback if service not available
+        fallback_models = [
+            'bielik-1.5b-gguf',
+            'bielik-11b-gguf',
+            'llama-3.1-8b'
+        ]
+        return jsonify([{'name': m} for m in fallback_models]), 200
+
+
