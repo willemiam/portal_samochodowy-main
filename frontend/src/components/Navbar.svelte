@@ -38,6 +38,9 @@
                 <li>
                     <Link to="/experiments" class="nav-link">Experiments</Link>
                 </li>
+                <li>
+                    <Link to="/bulk-gaps" class="nav-link">Bulk Gaps</Link>
+                </li>
             </div>
         </nav>
     </div>

@@ -5,6 +5,7 @@
   import Home from "./routes/home.svelte";
   import Experiments from "./routes/experiments.svelte";
   import ExperimentDetail from "./routes/experimentDetail.svelte";
+  import BulkGaps from "./routes/bulkGaps.svelte";
   import Footer from "./components/Footer.svelte";
 
   export let url = "";
@@ -17,6 +18,7 @@
       <Route path="/" component={Home} />
       <Route path="/experiments" component={Experiments} />
       <Route path="/experiments/:id" component={ExperimentDetail} />
+      <Route path="/bulk-gaps" component={BulkGaps} />
     </main>
 
     <Footer />

@@ -76,3 +76,90 @@ export async function createItem(itemData) {
   
   return await response.json();
 }
+
+// ============ MCP SERVICE FUNCTIONS ============
+
+/**
+ * Construct text with gap markers from car form data
+ */
+export function constructTextWithGaps(carData) {
+  const { make, model, year, mileage, condition, fuel_type } = carData;
+  
+  // Template pattern: Year Make [GAP:1] with [GAP:2] engine, mileage
+  const text_with_gaps = `${year} ${make} [GAP:1] z [GAP:2] silnikiem, ${mileage} km`;
+  
+  return {
+    text_with_gaps,
+    attributes: {
+      year,
+      make,
+      model,
+      condition,
+      fuel_type
+    }
+  };
+}
+
+/**
+ * Build MCP request from car form data
+ */
+export function buildMCPRequest(carData, itemId = null) {
+  const { text_with_gaps, attributes } = constructTextWithGaps(carData);
+  
+  return {
+    domain: "cars",
+    model: "bielik-1.5b-gguf",
+    items: [
+      {
+        id: itemId || `ad-${Date.now()}`,
+        text_with_gaps,
+        attributes
+      }
+    ],
+    options: {
+      language: "pl",
+      temperature: 0.3,
+      max_new_tokens: 200,
+      top_n_per_gap: 1
+    }
+  };
+}
+
+/**
+ * Call MCP service for gap-filling
+ */
+export async function callMCPService(request) {
+  const MCP_URL = import.meta.env.VITE_MCP_SERVICE_URL || "http://localhost:8001";
+  
+  const response = await fetch(
+    `${MCP_URL}/api/v1/enhance-description`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request)
+    }
+  );
+  
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`MCP Error ${response.status}: ${error}`);
+  }
+  
+  const data = await response.json();
+  
+  // Extract filled text from response
+  if (data.items && data.items[0]) {
+    const item = data.items[0];
+    if (item.status === "ok" || item.status === "warning") {
+      return {
+        filled_text: item.filled_text,
+        gaps: item.gaps,
+        status: item.status
+      };
+    } else {
+      throw new Error(item.error || "Gap filling failed");
+    }
+  }
+  
+  throw new Error("Invalid MCP response structure");
+}
