@@ -8,7 +8,8 @@
     saveResult,
     getSavedResults,
     getResultsByModel,
-    deleteResult
+    deleteResult,
+    loadBulkAds
   } from '../lib/gapGenerator.js';
 
   let bulkText = '';
@@ -20,6 +21,10 @@
   let isProcessing = false;
   let error = '';
   let success = '';
+
+  // Bulk ads loading
+  let adCount = 50;
+  let isLoadingAds = false;
 
   // Results display
   let originalText = '';
@@ -65,6 +70,29 @@
 
   function loadSavedResults() {
     savedResults = getSavedResults();
+  }
+
+  async function handleLoadAds() {
+    error = '';
+    success = '';
+    isLoadingAds = true;
+
+    try {
+      if (adCount < 1 || adCount > 500) {
+        throw new Error('Ad count must be between 1 and 500');
+      }
+
+      console.log(`Loading ${adCount} ads from retrieval service...`);
+      const result = await loadBulkAds(adCount, true);
+      
+      bulkText = result.bulk_text;
+      success = `✅ Loaded ${result.count} ads (${bulkText.length} characters)`;
+    } catch (err) {
+      console.error('Error loading ads:', err);
+      error = `❌ Failed to load ads: ${err.message}`;
+    } finally {
+      isLoadingAds = false;
+    }
   }
 
   async function handleProcess() {
@@ -180,10 +208,39 @@
 
   <div class="main-panel">
     <div class="input-section">
-      <h2>Step 1: Paste Your Ads</h2>
+      <h2>Step 1: Load or Paste Your Ads</h2>
+      
+      <div class="load-ads-section">
+        <div class="load-ads-group">
+          <label>Load from database:</label>
+          <div class="load-row">
+            <input
+              type="number"
+              bind:value={adCount}
+              min="1"
+              max="500"
+              disabled={isLoadingAds}
+              placeholder="50"
+            />
+            <button
+              on:click={handleLoadAds}
+              disabled={isLoadingAds || adCount < 1}
+              class:loading={isLoadingAds}
+            >
+              {#if isLoadingAds}
+                ⏳ Loading...
+              {:else}
+                🪄 Load Bulk Ads
+              {/if}
+            </button>
+          </div>
+        </div>
+        <p class="hint">or paste ads manually below</p>
+      </div>
+
       <textarea
         bind:value={bulkText}
-        placeholder="Paste 50+ concatenated car ads here..."
+        placeholder="Paste 50+ concatenated car ads here, or click 'Load Bulk Ads' above..."
         rows="10"
       />
 
@@ -376,6 +433,69 @@
     font-family: monospace;
     font-size: 14px;
     resize: vertical;
+  }
+
+  .load-ads-section {
+    background: #e3f2fd;
+    border: 1px solid #90caf9;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+  }
+
+  .load-ads-group {
+    margin-bottom: 8px;
+  }
+
+  .load-ads-group label {
+    display: block;
+    margin-bottom: 8px;
+    color: #333;
+    font-weight: 500;
+  }
+
+  .load-row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .load-row input[type='number'] {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    width: 100px;
+  }
+
+  .load-row button {
+    padding: 8px 16px;
+    background: #2196f3;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: 500;
+  }
+
+  .load-row button:hover:not(:disabled) {
+    background: #1976d2;
+  }
+
+  .load-row button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+  }
+
+  .load-row button.loading {
+    background: #ffc107;
+  }
+
+  .hint {
+    color: #666;
+    font-size: 12px;
+    margin: 8px 0 0 0;
   }
 
   .config-row {
