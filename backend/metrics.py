@@ -2,7 +2,7 @@
 A/B Testing Metrics Module
 
 Calculates quality scores for gap-filled text:
-- Semantic score: Word embedding similarity
+- Semantic score: Text coherence and completeness
 - Domain relevance: Car-specific vocabulary
 - Grammar score: Polish case correctness
 - Overall score: Weighted combination
@@ -10,8 +10,6 @@ Calculates quality scores for gap-filled text:
 
 import re
 from typing import Dict, List, Tuple
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
 
 
 class GapFillMetrics:

@@ -1,9 +1,16 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
 from werkzeug.security import generate_password_hash
 from app import app, db
 from models import *
 from auth_middleware import requires_auth, requires_auth_optional
 from services.storage_service import storage_service
+from metrics import GapFillMetrics
+import requests
+import time
+import csv
+from io import StringIO
+from datetime import datetime
+import os
 
 
 #ENDPOINT UŻYTKOWNIKÓW
@@ -788,4 +795,360 @@ def experiment_evaluations(experiment_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+# ============================================================================
+# A/B TESTING ENDPOINTS
+# ============================================================================
+
+BIELIK_API_URL = os.environ.get('BIELIK_APP_URL', 'http://localhost:8000')
+
+@app.route('/api/experiments', methods=['GET'])
+def get_experiments():
+    """List all experiments"""
+    try:
+        experiments = Experiment.query.order_by(Experiment.created_at.desc()).all()
+        return jsonify([{
+            'id': e.id,
+            'name': e.name,
+            'description': e.description,
+            'models': e.models,
+            'parameters': e.parameters,
+            'status': e.status,
+            'created_at': e.created_at.isoformat() if e.created_at else None,
+            'completed_runs': e.completed_runs,
+            'total_runs': e.total_runs
+        } for e in experiments]), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/experiments', methods=['POST'])
+def create_experiment():
+    """Create a new experiment"""
+    try:
+        data = request.json
+        
+        # Validate required fields
+        if not data.get('name'):
+            return jsonify({'error': 'Name is required'}), 400
+        if not data.get('models') or len(data['models']) == 0:
+            return jsonify({'error': 'At least one model must be selected'}), 400
+        
+        experiment = Experiment(
+            name=data['name'],
+            description=data.get('description', ''),
+            models=data['models'],
+            parameters=data.get('parameters', {}),
+            test_ads=data.get('test_ads', []),
+            notes=data.get('notes', '')
+        )
+        
+        db.session.add(experiment)
+        db.session.commit()
+        
+        return jsonify({
+            'id': experiment.id,
+            'name': experiment.name,
+            'description': experiment.description,
+            'models': experiment.models,
+            'parameters': experiment.parameters,
+            'created_at': experiment.created_at.isoformat(),
+            'status': experiment.status
+        }), 201
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/experiments/<int:experiment_id>', methods=['GET'])
+def get_experiment(experiment_id):
+    """Get a single experiment"""
+    try:
+        experiment = Experiment.query.get(experiment_id)
+        if not experiment:
+            return jsonify({'error': 'Experiment not found'}), 404
+        
+        return jsonify({
+            'id': experiment.id,
+            'name': experiment.name,
+            'description': experiment.description,
+            'models': experiment.models,
+            'parameters': experiment.parameters,
+            'test_ads': experiment.test_ads,
+            'status': experiment.status,
+            'created_at': experiment.created_at.isoformat() if experiment.created_at else None,
+            'completed_at': experiment.completed_at.isoformat() if experiment.completed_at else None,
+            'total_runs': experiment.total_runs,
+            'completed_runs': experiment.completed_runs,
+            'failed_runs': experiment.failed_runs
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/experiments/<int:experiment_id>/run', methods=['POST'])
+def run_experiment(experiment_id):
+    """Execute experiment on test items"""
+    try:
+        experiment = Experiment.query.get(experiment_id)
+        if not experiment:
+            return jsonify({'error': 'Experiment not found'}), 404
+        
+        data = request.json
+        items = data.get('items', [])
+        
+        if not items:
+            return jsonify({'error': 'No test items provided'}), 400
+        
+        experiment.status = 'running'
+        experiment.started_at = datetime.utcnow()
+        experiment.total_runs = len(items) * len(experiment.models)
+        experiment.completed_runs = 0
+        experiment.failed_runs = 0
+        db.session.commit()
+        
+        results = []
+        metrics = GapFillMetrics()
+        
+        # Run each item with each model
+        for item in items:
+            item_id = item.get('id', f'item-{len(results)}')
+            text_with_gaps = item.get('text_with_gaps', '')
+            
+            for model_name in experiment.models:
+                try:
+                    start_time = time.time()
+                    
+                    # Call Bielik service
+                    response = requests.post(
+                        f'{BIELIK_API_URL}/infill',
+                        json={
+                            'domain': 'cars',
+                            'model': model_name,
+                            'items': [{'id': item_id, 'text_with_gaps': text_with_gaps}],
+                            'options': experiment.parameters
+                        },
+                        timeout=120
+                    )
+                    
+                    generation_time = time.time() - start_time
+                    
+                    if response.status_code == 200:
+                        result_data = response.json()
+                        model_results = result_data.get('results', [])
+                        
+                        if model_results:
+                            model_result = model_results[0]
+                            
+                            # Calculate metrics
+                            filled_text = model_result.get('filled_text', '')
+                            gaps = model_result.get('gaps', [])
+                            
+                            # Extract gap choices for scoring
+                            gap_choices = {}
+                            for gap in gaps:
+                                gap_choices[gap['index']] = gap['choice']
+                            
+                            semantic_score = metrics.calculate_semantic_score(filled_text, text_with_gaps)
+                            domain_score = metrics.calculate_domain_score(gap_choices)
+                            grammar_score = metrics.calculate_grammar_score(gap_choices)
+                            
+                            overall_score = (semantic_score + domain_score + grammar_score) / 3
+                            
+                            # Save run result
+                            run = ExperimentRun(
+                                experiment_id=experiment_id,
+                                model_name=model_name,
+                                ad_id=item_id,
+                                original_text=text_with_gaps,
+                                filled_text=filled_text,
+                                gap_fills={str(g['index']): g for g in gaps},
+                                semantic_score=semantic_score,
+                                domain_relevance_score=domain_score,
+                                grammar_score=grammar_score,
+                                overall_score=overall_score,
+                                generation_time=generation_time,
+                                status='success'
+                            )
+                            
+                            db.session.add(run)
+                            db.session.commit()
+                            
+                            results.append({
+                                'id': run.id,
+                                'item_id': item_id,
+                                'model_name': model_name,
+                                'filled_text': filled_text,
+                                'gaps': gaps,
+                                'semantic_score': semantic_score,
+                                'domain_score': domain_score,
+                                'grammar_score': grammar_score,
+                                'overall_score': overall_score,
+                                'generation_time': generation_time
+                            })
+                            
+                            experiment.completed_runs += 1
+                        else:
+                            experiment.failed_runs += 1
+                    else:
+                        experiment.failed_runs += 1
+                
+                except Exception as e:
+                    experiment.failed_runs += 1
+                    run = ExperimentRun(
+                        experiment_id=experiment_id,
+                        model_name=model_name,
+                        ad_id=item_id,
+                        original_text=text_with_gaps,
+                        status='error',
+                        error_message=str(e),
+                        generation_time=0
+                    )
+                    db.session.add(run)
+                    db.session.commit()
+        
+        experiment.status = 'completed'
+        experiment.completed_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({'results': results, 'status': 'completed'}), 200
+    
+    except Exception as e:
+        experiment.status = 'failed'
+        db.session.commit()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/experiments/<int:experiment_id>/results', methods=['GET'])
+def get_experiment_results(experiment_id):
+    """Get experiment results"""
+    try:
+        experiment = Experiment.query.get(experiment_id)
+        if not experiment:
+            return jsonify({'error': 'Experiment not found'}), 404
+        
+        runs = ExperimentRun.query.filter_by(experiment_id=experiment_id).all()
+        
+        return jsonify({
+            'experiment_id': experiment_id,
+            'experiment_name': experiment.name,
+            'models_compared': experiment.models,
+            'total_items': experiment.total_runs // len(experiment.models) if experiment.models else 0,
+            'results': [{
+                'id': r.id,
+                'item_id': r.ad_id,
+                'model_name': r.model_name,
+                'original_text': r.original_text,
+                'filled_text': r.filled_text,
+                'gaps': [g for g in (r.gap_fills or {}).values()] if r.gap_fills else [],
+                'semantic_score': r.semantic_score,
+                'domain_score': r.domain_relevance_score,
+                'grammar_score': r.grammar_score,
+                'overall_score': r.overall_score,
+                'generation_time': r.generation_time
+            } for r in runs],
+            'created_at': experiment.created_at.isoformat() if experiment.created_at else None
+        }), 200
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/experiments/<int:experiment_id>/export', methods=['GET'])
+def export_experiment(experiment_id):
+    """Export experiment results as CSV"""
+    try:
+        experiment = Experiment.query.get(experiment_id)
+        if not experiment:
+            return jsonify({'error': 'Experiment not found'}), 404
+        
+        runs = ExperimentRun.query.filter_by(experiment_id=experiment_id).all()
+        
+        # Create CSV
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        writer.writerow([
+            'Item ID', 'Model', 'Original Text', 'Filled Text',
+            'Semantic Score', 'Domain Score', 'Grammar Score', 'Overall Score',
+            'Generation Time (s)'
+        ])
+        
+        for run in runs:
+            writer.writerow([
+                run.ad_id,
+                run.model_name,
+                run.original_text,
+                run.filled_text,
+                f"{run.semantic_score:.2f}" if run.semantic_score else "N/A",
+                f"{run.domain_relevance_score:.2f}" if run.domain_relevance_score else "N/A",
+                f"{run.grammar_score:.2f}" if run.grammar_score else "N/A",
+                f"{run.overall_score:.2f}" if run.overall_score else "N/A",
+                f"{run.generation_time:.2f}" if run.generation_time else "N/A"
+            ])
+        
+        output.seek(0)
+        return send_file(
+            StringIO(output.getvalue()),
+            mimetype="text/csv",
+            as_attachment=True,
+            download_name=f"experiment_{experiment_id}_results.csv"
+        )
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/experiments/<int:experiment_id>', methods=['DELETE'])
+def delete_experiment(experiment_id):
+    """Delete an experiment"""
+    try:
+        experiment = Experiment.query.get(experiment_id)
+        if not experiment:
+            return jsonify({'error': 'Experiment not found'}), 404
+        
+        # Delete related runs first
+        ExperimentRun.query.filter_by(experiment_id=experiment_id).delete()
+        QualityEvaluation.query.filter_by(experiment_id=experiment_id).delete()
+        
+        db.session.delete(experiment)
+        db.session.commit()
+        
+        return jsonify({'status': 'deleted', 'id': experiment_id}), 200
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/models', methods=['GET'])
+def get_available_models():
+    """Get list of available models"""
+    try:
+        # Try to get from Bielik service
+        response = requests.get(f'{BIELIK_API_URL}/models', timeout=5)
+        
+        if response.status_code == 200:
+            models = response.json()
+            return jsonify([{'name': m.get('name', m) if isinstance(m, dict) else m} for m in models]), 200
+        
+        # Fallback if service not available
+        fallback_models = [
+            'bielik-1.5b-gguf',
+            'bielik-11b-gguf',
+            'llama-3.1-8b'
+        ]
+        return jsonify([{'name': m} for m in fallback_models]), 200
+    
+    except:
+        # Fallback if service not available
+        fallback_models = [
+            'bielik-1.5b-gguf',
+            'bielik-11b-gguf',
+            'llama-3.1-8b'
+        ]
+        return jsonify([{'name': m} for m in fallback_models]), 200
+
 
