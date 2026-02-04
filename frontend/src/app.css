@@ -9,6 +9,15 @@
   --success: #28a745;
   --warning: #ffc107;
   --danger: #dc3545;
+  
+  /* A/B Testing specific colors */
+  --chart-blue: #3b82f6;
+  --chart-green: #10b981;
+  --chart-purple: #8b5cf6;
+  --chart-orange: #f97316;
+  --stat-good: #22c55e;
+  --stat-fair: #f59e0b;
+  --stat-poor: #ef4444;
 }
 
 * {
@@ -62,6 +71,16 @@ body {
   color: white;
 }
 
+.btn-outline:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Card Styles */
 .card {
   background-color: white;
@@ -98,4 +117,148 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 1.5rem;
+}
+
+/* A/B Testing Specific Styles */
+
+/* Forms */
+input[type="text"],
+input[type="number"],
+input[type="email"],
+textarea,
+select {
+  background-color: white;
+  border: 1px solid var(--mid-gray);
+  padding: 0.75rem;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: inherit;
+  transition: border-color 0.2s ease;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="email"]:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px rgba(0, 136, 204, 0.1);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  background-color: var(--primary-color);
+  color: white;
+  padding: 0.75rem;
+  text-align: left;
+  font-weight: 600;
+}
+
+td {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--light-gray);
+}
+
+tr:hover {
+  background-color: var(--light-gray);
+}
+
+/* Results & Metrics */
+.metric-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.metric-badge.good {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.metric-badge.fair {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.metric-badge.poor {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.metric-badge.neutral {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+/* Comparison Cards */
+.comparison-card {
+  background: white;
+  border: 1px solid var(--mid-gray);
+  border-radius: 6px;
+  padding: 1rem;
+  transition: all 0.3s ease;
+}
+
+.comparison-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Result Highlighting */
+.result-better {
+  background-color: #dcfce7;
+  font-weight: 500;
+}
+
+.result-worse {
+  background-color: #fee2e2;
+  font-weight: 500;
+}
+
+.result-same {
+  background-color: transparent;
+}
+
+/* Alerts */
+.alert {
+  padding: 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+}
+
+.alert-success {
+  background-color: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.alert-warning {
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.alert-danger {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.alert-info {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
 }
