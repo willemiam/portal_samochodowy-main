@@ -56,8 +56,8 @@
       console.error(err);
       // Use fallback models
       availableModels = [
-        { name: "bielik-1.5b-gguf", type: "gguf", size: "1.7GB", polish_support: "excellent" },
-        { name: "bielik-11b-gguf", type: "gguf", size: "7.2GB", polish_support: "excellent" },
+        { name: "bielik-1.5b-transformer", type: "transformer", size: "2.4GB", polish_support: "excellent" },
+        { name: "bielik-11b-transformer", type: "transformer", size: "22GB", polish_support: "excellent" },
         { name: "llama-3.1-8b", type: "inference_api", size: "8B", polish_support: "excellent" }
       ];
       selectedModel = availableModels[0].name;
