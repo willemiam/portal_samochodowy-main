@@ -14,6 +14,7 @@
 
   let bulkText = '';
   let removalPercent = 10;
+  let temperature = 0.3;
   let selectedModel = '';
   let availableModels = [];
   let modelsLoading = true;
@@ -34,10 +35,21 @@
   let processingTime = 0;
   let gapStats = { created: 0, total_words: 0 };
   let showResults = false;
+  let gapOriginalsMap = {};
+
+  // Multi-model testing
+  let gapsAreActive = false; // Track if gaps have been created and are ready for testing
+  let modelTestResults = []; // Array of results from different models tested on same gaps
+  let currentTestingModel = ''; // Model being tested in the multi-model phase
+  let isTestingModel = false; // Flag for testing with a new model
+  let testError = '';
 
   // Saved results
   let savedResults = [];
   let showSavedResults = false;
+  let sortBy = 'recent'; // 'recent', 'model', 'gaps'
+  let filterModel = ''; // Filter by model
+  let groupedResults = {}; // Group results by gap configuration
 
   onMount(async () => {
     // Load available models from Bielik
@@ -68,8 +80,112 @@
     loadSavedResults();
   });
 
+  function highlightFilledWords(text, gaps) {
+    if (!text || !gaps || gaps.length === 0) return text;
+
+    let result = text;
+    // Create a map to track count of each word to bold (for multiple occurrences)
+    const wordCounts = {};
+    gaps.forEach(gap => {
+      wordCounts[gap.choice] = (wordCounts[gap.choice] || 0) + 1;
+    });
+
+    // For each unique filled word, bold only the required number of occurrences
+    Object.entries(wordCounts).forEach(([word, count]) => {
+      let replacements = 0;
+      // Use a function in replace to limit replacements per word
+      const regex = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+      result = result.replace(regex, (match) => {
+        if (replacements < count) {
+          replacements++;
+          return `<strong>${match}</strong>`;
+        }
+        return match;
+      });
+    });
+
+    return result;
+  }
+
   function loadSavedResults() {
     savedResults = getSavedResults();
+    groupResultsByConfiguration();
+  }
+
+  function groupResultsByConfiguration() {
+    groupedResults = {};
+    
+    savedResults.forEach(result => {
+      // Create a key from the gap configuration
+      const key = result.text_with_gaps || 'ungrouped';
+      const hash = key.substring(0, 50); // Use first 50 chars as identifier
+      
+      if (!groupedResults[hash]) {
+        groupedResults[hash] = {
+          gaps_count: result.gaps_count,
+          total_words: result.total_words,
+          created_at: result.timestamp,
+          results: []
+        };
+      }
+      
+      groupedResults[hash].results.push(result);
+    });
+
+    // Sort results within each group by model name
+    Object.keys(groupedResults).forEach(key => {
+      groupedResults[key].results.sort((a, b) => a.model.localeCompare(b.model));
+    });
+  }
+
+  function getUniqueModels() {
+    const models = new Set(savedResults.map(r => r.model));
+    return Array.from(models).sort();
+  }
+
+  function getSortedGroups() {
+    const groups = Object.entries(groupedResults);
+    
+    if (sortBy === 'recent') {
+      groups.sort((a, b) => new Date(b[1].created_at) - new Date(a[1].created_at));
+    } else if (sortBy === 'gaps') {
+      groups.sort((a, b) => b[1].gaps_count - a[1].gaps_count);
+    }
+    
+    return groups;
+  }
+
+  function getFilteredResults(results) {
+    if (!filterModel) return results;
+    return results.filter(r => r.model === filterModel);
+  }
+
+  function compareResults(groupKey) {
+    // Load all results from this group to compare
+    const group = groupedResults[groupKey];
+    if (group.results.length === 0) return;
+    
+    // Set the original text and gaps from first result
+    const firstResult = group.results[0];
+    originalText = firstResult.original_text;
+    textWithGaps = firstResult.text_with_gaps;
+    gapStats = {
+      created: firstResult.gaps_count,
+      total_words: firstResult.total_words
+    };
+    
+    // Load all model results from this group for comparison
+    modelTestResults = group.results.map(r => ({
+      model: r.model,
+      filled_text: r.filled_text,
+      gaps: r.gaps_data,
+      processing_time_ms: r.processing_time_ms,
+      timestamp: r.timestamp
+    }));
+    
+    gapsAreActive = false;
+    showResults = true;
+    showSavedResults = false;
   }
 
   async function handleLoadAds() {
@@ -100,6 +216,8 @@
     success = '';
     isProcessing = true;
     showResults = false;
+    gapsAreActive = false;
+    modelTestResults = [];
 
     try {
       // Validate input
@@ -111,7 +229,7 @@
         throw new Error('Text too short (minimum 100 chars)');
       }
 
-      // Step 1: Create gaps
+      // Step 1: Create gaps (only this step now)
       console.log('Step 1: Creating gaps...');
       const gapResult = createGapsInText(bulkText, removalPercent);
 
@@ -121,43 +239,106 @@
         created: gapResult.gaps_created,
         total_words: gapResult.word_count
       };
+      gapOriginalsMap = (gapResult.gap_originals || []).reduce((acc, gap) => {
+        acc[gap.index] = gap.original;
+        return acc;
+      }, {});
 
-      // Step 2: Build MCP request
-      console.log('Step 2: Building MCP request...');
-      const mcpRequest = buildMCPRequest(textWithGaps, selectedModel);
-
-      // Step 3: Call MCP service
-      console.log('Step 3: Calling MCP service...');
-      const mcpResult = await callMCPService(mcpRequest);
-
-      filledText = mcpResult.filled_text;
-      gapsData = mcpResult.gaps || [];
-      processingTime = mcpResult.processing_time_ms;
-
-      // Step 4: Save result
-      console.log('Step 4: Saving result...');
-      const savedId = saveResult({
-        model: selectedModel,
-        original_text: originalText,
-        text_with_gaps: textWithGaps,
-        filled_text: filledText,
-        gaps_data: gapsData,
-        gaps_count: gapStats.created,
-        total_words: gapStats.total_words,
-        removal_percent: removalPercent,
-        processing_time_ms: processingTime,
-        status: 'success'
-      });
-
-      success = `✅ Gap-filling complete! Result saved. (${gapStats.created} gaps, ${processingTime}ms)`;
+      success = `✅ Gaps created! (${gapStats.created} gaps out of ${gapStats.total_words} words). Now select a model and test.`;
+      gapsAreActive = true;
       showResults = true;
-      loadSavedResults();
+      modelTestResults = [];
+      currentTestingModel = selectedModel;
     } catch (err) {
       console.error('Error:', err);
       error = `❌ ${err.message}`;
     } finally {
       isProcessing = false;
     }
+  }
+
+  async function handleTestWithModel() {
+    testError = '';
+    error = '';
+    isTestingModel = true;
+
+    try {
+      if (!textWithGaps) {
+        throw new Error('Please create gaps first');
+      }
+
+      if (!currentTestingModel) {
+        throw new Error('Please select a model');
+      }
+
+      console.log(`Testing with model: ${currentTestingModel}`);
+
+      // Check if this model has already been tested
+      const alreadyTested = modelTestResults.find(r => r.model === currentTestingModel);
+      if (alreadyTested) {
+        throw new Error(`Model "${currentTestingModel}" has already been tested. Select a different model.`);
+      }
+
+      // Build MCP request
+      const mcpRequest = buildMCPRequest(textWithGaps, currentTestingModel, temperature);
+
+      // Call MCP service
+      const mcpResult = await callMCPService(mcpRequest);
+
+      // Enrich gaps with original words (MCP service should return these)
+      const enrichedGaps = (mcpResult.gaps || []).map(gap => ({
+        ...gap,
+        original: gapOriginalsMap[gap.index] || gap.original || gap.original_word || '—'
+      }));
+
+      // Store result
+      const testResult = {
+        model: currentTestingModel,
+        filled_text: mcpResult.filled_text,
+        gaps: enrichedGaps,
+        processing_time_ms: mcpResult.processing_time_ms,
+        timestamp: new Date().toISOString()
+      };
+
+      modelTestResults = [...modelTestResults, testResult];
+
+      success = `✅ Tested with ${currentTestingModel}! (${mcpResult.processing_time_ms}ms). Select another model to compare.`;
+
+      // Save this result
+      saveResult({
+        model: currentTestingModel,
+        original_text: originalText,
+        text_with_gaps: textWithGaps,
+        filled_text: testResult.filled_text,
+        gaps_data: testResult.gaps,
+        gaps_count: gapStats.created,
+        total_words: gapStats.total_words,
+        removal_percent: removalPercent,
+        processing_time_ms: testResult.processing_time_ms,
+        status: 'success'
+      });
+
+      // Auto-select first untested model or reset
+      const nextAvailableModel = availableModels.find(m => !modelTestResults.find(r => r.model === m.name));
+      currentTestingModel = nextAvailableModel ? nextAvailableModel.name : '';
+
+      loadSavedResults();
+    } catch (err) {
+      console.error('Error:', err);
+      testError = `❌ ${err.message}`;
+    } finally {
+      isTestingModel = false;
+    }
+  }
+
+  function regenerateGaps() {
+    gapsAreActive = false;
+    modelTestResults = [];
+    gapOriginalsMap = {};
+    showResults = false;
+    success = '';
+    //Re-run the process function
+    handleProcess();
   }
 
   function handleDeleteResult(resultId) {
@@ -184,19 +365,94 @@
 
   function downloadResult() {
     const data = {
-      model: selectedModel,
-      original_text: originalText,
-      text_with_gaps: textWithGaps,
-      filled_text: filledText,
-      gaps: gapsData,
-      timestamp: new Date().toISOString()
+      gap_configuration: {
+        original_text: originalText,
+        text_with_gaps: textWithGaps,
+        gaps_count: gapStats.created,
+        total_words: gapStats.total_words,
+        removal_percent: removalPercent,
+        created_at: new Date().toISOString()
+      },
+      model_results: modelTestResults.map(result => ({
+        model: result.model,
+        filled_text: result.filled_text,
+        gaps: result.gaps.map(gap => ({
+          index: gap.index,
+          original: gap.original,
+          choice: gap.choice
+        })),
+        processing_time_ms: result.processing_time_ms,
+        tested_at: result.timestamp
+      }))
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `bulk-gaps-${Date.now()}.json`;
+    a.download = `bulk-gaps-comparison-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadModelResult(result) {
+    const data = {
+      gap_configuration: {
+        original_text: originalText,
+        text_with_gaps: textWithGaps,
+        gaps_count: gapStats.created,
+        total_words: gapStats.total_words,
+        removal_percent: removalPercent
+      },
+      model_result: {
+        model: result.model,
+        filled_text: result.filled_text,
+        gaps: result.gaps.map(gap => ({
+          index: gap.index,
+          original: gap.original,
+          choice: gap.choice
+        })),
+        processing_time_ms: result.processing_time_ms,
+        tested_at: result.timestamp
+      }
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gap-filling-${result.model.replace(/\s+/g, '-')}-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadSavedResult(result) {
+    const data = {
+      gap_configuration: {
+        original_text: result.original_text,
+        text_with_gaps: result.text_with_gaps,
+        gaps_count: result.gaps_count,
+        total_words: result.total_words,
+        removal_percent: result.removal_percent
+      },
+      model_result: {
+        model: result.model,
+        filled_text: result.filled_text,
+        gaps: (result.gaps_data || []).map(gap => ({
+          index: gap.index,
+          original: gap.original,
+          choice: gap.choice
+        })),
+        processing_time_ms: result.processing_time_ms,
+        tested_at: result.timestamp
+      }
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gap-filling-${result.model.replace(/\s+/g, '-')}-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -257,27 +513,6 @@
             disabled={isProcessing}
           />
         </div>
-
-        <div class="config-item">
-          <label>Model:</label>
-          {#if modelsLoading}
-            <select disabled>
-              <option>Loading models...</option>
-            </select>
-          {:else if modelsError}
-            <select disabled>
-              <option>Error: {modelsError}</option>
-            </select>
-          {:else}
-            <select bind:value={selectedModel} disabled={isProcessing}>
-              {#each availableModels as model}
-                <option value={model.name}>
-                  {model.name} ({model.type}, {model.size})
-                </option>
-              {/each}
-            </select>
-          {/if}
-        </div>
       </div>
 
       <button
@@ -286,9 +521,9 @@
         class:processing={isProcessing}
       >
         {#if isProcessing}
-          ⏳ Processing...
+          ⏳ Creating Gaps...
         {:else}
-          🎯 Create Gaps & Fill
+          🎯 Create Gaps
         {/if}
       </button>
     </div>
@@ -315,12 +550,12 @@
             <span class="value">{gapStats.total_words}</span>
           </div>
           <div class="stat">
-            <span class="label">Processing Time:</span>
-            <span class="value">{processingTime}ms</span>
+            <span class="label">Models Tested:</span>
+            <span class="value">{modelTestResults.length}</span>
           </div>
           <div class="stat">
-            <span class="label">Model:</span>
-            <span class="value">{selectedModel}</span>
+            <span class="label">Removal %:</span>
+            <span class="value">{removalPercent}%</span>
           </div>
         </div>
 
@@ -331,31 +566,130 @@
           </div>
 
           <div class="column">
-            <h3>With Gaps</h3>
+            <h3>Text with Gaps</h3>
             <div class="text-box highlight-gaps">{@html textWithGaps.replace(/\[GAP:\d+\]/g, m => `<span class="gap">${m}</span>`)}</div>
           </div>
-
-          <div class="column">
-            <h3>Filled Text</h3>
-            <div class="text-box filled">{filledText}</div>
-          </div>
         </div>
 
-        <div class="gaps-list">
-          <h3>Gaps Filled ({gapsData.length})</h3>
-          <div class="gaps">
-            {#each gapsData as gap}
-              <div class="gap-item">
-                <span class="index">[GAP:{gap.index}]</span>
-                <span class="choice">→ {gap.choice}</span>
+        {#if gapsAreActive}
+          <div class="model-testing-section">
+            <h3>🧪 Test with Models</h3>
+            <p class="testing-info">The gaps above are locked. Test them with different models to compare results.</p>
+
+            <div class="model-test-controls">
+              <div class="control-item">
+                <label>Select Model:</label>
+                {#if modelsLoading}
+                  <select disabled>
+                    <option>Loading models...</option>
+                  </select>
+                {:else if modelsError}
+                  <select disabled>
+                    <option>Error: {modelsError}</option>
+                  </select>
+                {:else}
+                  <select bind:value={currentTestingModel} disabled={isTestingModel}>
+                    {#each availableModels as model}
+                      {#if !modelTestResults.find(r => r.model === model.name)}
+                        <option value={model.name}>
+                          {model.name} ({model.type}, {model.size})
+                        </option>
+                      {/if}
+                    {/each}
+                  </select>
+                {/if}
               </div>
-            {/each}
-          </div>
-        </div>
 
-        <button on:click={downloadResult} class="download-btn">
-          ⬇️ Download JSON
-        </button>
+              <div class="control-item">
+                <label>Temperature: <strong>{temperature.toFixed(1)}</strong></label>
+                <input
+                  type="range"
+                  bind:value={temperature}
+                  min="0.0"
+                  max="1.0"
+                  step="0.1"
+                  disabled={isTestingModel}
+                />
+                <p class="slider-hint">Conservative (0.0) → Creative (1.0)</p>
+              </div>
+
+              <button
+                on:click={handleTestWithModel}
+                disabled={isTestingModel || !currentTestingModel}
+                class:testing={isTestingModel}
+              >
+                {#if isTestingModel}
+                  ⏳ Testing...
+                {:else}
+                  📤 Send to Model
+                {/if}
+              </button>
+
+              <button
+                on:click={regenerateGaps}
+                disabled={isProcessing || isTestingModel}
+                class="regenerate-btn"
+              >
+                🔄 Regenerate Gaps
+              </button>
+            </div>
+
+            {#if testError}
+              <div class="error-message">{testError}</div>
+            {/if}
+
+            {#if modelTestResults.length > 0}
+              <div class="model-results">
+                <h4>Results from {modelTestResults.length} Model(s)</h4>
+                
+                {#each modelTestResults as result, idx}
+                  <div class="model-result-item">
+                    <div class="result-header">
+                      <span class="model-badge">{result.model}</span>
+                      <span class="timing">{result.processing_time_ms}ms</span>
+                      <span class="timestamp">{new Date(result.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                    
+                    <div class="filled-text-display">
+                      <strong>Filled Text:</strong>
+                      <div class="text-box">{@html highlightFilledWords(result.filled_text, result.gaps)}</div>
+                    </div>
+
+                    <div class="gaps-filled">
+                      <strong>All Gaps Filled ({result.gaps.length}):</strong>
+                      <div class="gaps-table">
+                        <div class="gaps-header">
+                          <span class="col-index">Gap</span>
+                          <span class="col-original">Original</span>
+                          <span class="col-filled">Filled by {result.model}</span>
+                        </div>
+                        {#each result.gaps as gap}
+                          <div class="gaps-row">
+                            <span class="col-index">[{gap.index}]</span>
+                            <span class="col-original">{gap.original || '—'}</span>
+                            <span class="col-filled"><strong>{gap.choice}</strong></span>
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+
+                    <div class="result-download">
+                      <button on:click={() => downloadModelResult(result)} class="download-model-btn">
+                        ⬇️ Download JSON
+                      </button>
+                    </div>
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        {#if !gapsAreActive && modelTestResults.length === 0}
+          <button on:click={downloadResult} class="download-btn" style="width: 100%;">
+            ⬇️ Download Gaps Configuration
+          </button>
+        {/if}
       </div>
     {/if}
 
@@ -369,24 +703,92 @@
           {#if savedResults.length === 0}
             <p class="no-results">No saved results yet</p>
           {:else}
-            {#each savedResults as result}
-              <div class="result-item">
-                <div class="result-header">
-                  <span class="model">{result.model}</span>
-                  <span class="timestamp">{new Date(result.timestamp).toLocaleString()}</span>
-                  <span class="gaps-count">{result.gaps_count} gaps</span>
-                </div>
-                <div class="result-actions">
-                  <button on:click={() => viewResult(result)} class="view-btn">View</button>
-                  <button
-                    on:click={() => handleDeleteResult(result.id)}
-                    class="delete-btn"
-                  >
-                    Delete
-                  </button>
-                </div>
+            <div class="results-controls">
+              <div class="control-group">
+                <label>Sort by:</label>
+                <select bind:value={sortBy}>
+                  <option value="recent">Most Recent</option>
+                  <option value="gaps">Most Gaps</option>
+                </select>
               </div>
-            {/each}
+
+              <div class="control-group">
+                <label>Filter by model:</label>
+                <select bind:value={filterModel}>
+                  <option value="">All Models</option>
+                  {#each getUniqueModels() as model}
+                    <option value={model}>{model}</option>
+                  {/each}
+                </select>
+              </div>
+            </div>
+
+            <div class="grouped-results">
+              {#each getSortedGroups() as [groupKey, group]}
+                <div class="result-group">
+                  <div class="group-header">
+                    <div class="group-info">
+                      <h4>Gap Configuration</h4>
+                      <div class="group-stats">
+                        <span class="stat-badge">
+                          <strong>{group.gaps_count}</strong> gaps
+                        </span>
+                        <span class="stat-badge">
+                          <strong>{group.total_words}</strong> words
+                        </span>
+                        <span class="stat-badge">
+                          <strong>{group.results.length}</strong> model{group.results.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      <div class="group-models">
+                        {#each group.results as result}
+                          <span class="model-pill">{result.model}</span>
+                        {/each}
+                      </div>
+                    </div>
+                    <div class="group-actions">
+                      {#if group.results.length > 1}
+                        <button
+                          on:click={() => compareResults(groupKey)}
+                          class="compare-btn"
+                          title="Compare all models from this configuration"
+                        >
+                          🔀 Compare All
+                        </button>
+                      {/if}
+                    </div>
+                  </div>
+
+                  <div class="group-results">
+                    {#each getFilteredResults(group.results) as result}
+                      <div class="result-item-detailed">
+                        <div class="result-model-row">
+                          <span class="model-badge-large">{result.model}</span>
+                          <span class="result-time">{new Date(result.timestamp).toLocaleString()}</span>
+                          <span class="result-timing">{result.processing_time_ms}ms</span>
+                        </div>
+
+                        <div class="result-preview">
+                          <strong>Filled Text Preview:</strong>
+                          <div class="text-preview">
+                            {result.filled_text.substring(0, 150)}{result.filled_text.length > 150 ? '...' : ''}
+                          </div>
+                        </div>
+
+                        <div class="result-item-actions">
+                          <button on:click={() => viewResult(result)} class="view-btn">👁️ View Full</button>
+                          <button on:click={() => downloadSavedResult(result)} class="download-btn-small">⬇️ JSON</button>
+                          <button on:click={() => handleDeleteResult(result.id)} class="delete-btn">🗑️ Delete</button>
+                        </div>
+                      </div>
+                    {/each}
+                    {#if filterModel && getFilteredResults(group.results).length === 0}
+                      <p class="no-filter-results">No results for {filterModel}</p>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            </div>
           {/if}
         </div>
       {/if}
@@ -520,6 +922,7 @@
     height: 6px;
     border-radius: 3px;
   }
+  .slider-hint {    font-size: 12px;    color: #666;    margin: 6px 0 0 0;  }
 
   select {
     padding: 8px 12px;
@@ -706,68 +1109,486 @@
     margin-top: 15px;
   }
 
+  .results-controls {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f5f5f5;
+    border-radius: 6px;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .control-group label {
+    font-weight: 500;
+    color: #333;
+    font-size: 13px;
+  }
+
+  .control-group select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    background: white;
+  }
+
   .no-results {
     color: #999;
     text-align: center;
     padding: 20px;
   }
 
-  .result-item {
-    background: white;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 12px;
-    margin-bottom: 10px;
+  .grouped-results {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    gap: 15px;
   }
 
-  .result-header {
+  .result-group {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .group-header {
+    background: #f8f9fa;
+    border-bottom: 2px solid #e9ecef;
+    padding: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 15px;
+  }
+
+  .group-info {
     flex: 1;
   }
 
-  .model {
-    background: #e3f2fd;
-    color: #1976d2;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 12px;
-    font-weight: bold;
-    margin-right: 10px;
+  .group-info h4 {
+    margin: 0 0 10px 0;
+    color: #333;
+    font-size: 14px;
   }
 
-  .timestamp {
+  .group-stats {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+
+  .stat-badge {
+    background: #e7f3ff;
+    color: #0066cc;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .group-models {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .model-pill {
+    background: #f0f0f0;
+    color: #333;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    border: 1px solid #ddd;
+  }
+
+  .group-actions {
+    display: flex;
+    gap: 10px;
+  }
+
+  .compare-btn {
+    background: #6c63ff;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: 500;
+  }
+
+  .compare-btn:hover {
+    background: #5a52d5;
+  }
+
+  .group-results {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .result-item-detailed {
+    background: #fafafa;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 12px;
+    transition: all 0.2s;
+  }
+
+  .result-item-detailed:hover {
+    background: #f5f5f5;
+    border-color: #b0b0b0;
+  }
+
+  .result-model-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+
+  .model-badge-large {
+    background: #2196f3;
+    color: white;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 12px;
+  }
+
+  .result-time {
     color: #666;
     font-size: 12px;
-    margin-right: 10px;
   }
 
-  .gaps-count {
-    color: #28a745;
-    font-weight: bold;
+  .result-timing {
+    background: #fff3cd;
+    color: #856404;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .result-preview {
+    margin-bottom: 10px;
+  }
+
+  .result-preview strong {
+    display: block;
+    color: #333;
     font-size: 12px;
+    margin-bottom: 6px;
   }
 
-  .result-actions {
+  .text-preview {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 8px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #555;
+    max-height: 60px;
+    overflow-y: auto;
+    word-break: break-word;
+  }
+
+  .result-item-actions {
     display: flex;
-    gap: 5px;
+    gap: 6px;
   }
 
   .view-btn {
     background: #007bff;
+    color: white;
     padding: 6px 12px;
-    font-size: 12px;
+    border: none;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .view-btn:hover {
+    background: #0056b3;
   }
 
   .delete-btn {
     background: #dc3545;
+    color: white;
     padding: 6px 12px;
-    font-size: 12px;
+    border: none;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
   }
 
   .delete-btn:hover {
     background: #c82333;
+  }
+
+  .download-btn-small {
+    background: #28a745;
+    color: white;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .download-btn-small:hover {
+    background: #218838;
+  }
+
+  .result-download {
+    margin-top: 12px;
+    border-top: 1px solid #e0e0e0;
+    padding-top: 12px;
+  }
+
+  .download-model-btn {
+    background: #28a745;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 3px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+  }
+
+  .download-model-btn:hover {
+    background: #218838;
+  }
+
+  .no-filter-results {
+    color: #999;
+    font-size: 12px;
+    text-align: center;
+    padding: 12px;
+  }
+
+  .model-testing-section {
+    background: #f0f7ff;
+    border: 2px solid #2196f3;
+    border-radius: 8px;
+    padding: 20px;
+    margin-top: 20px;
+  }
+
+  .model-testing-section h3 {
+    color: #1976d2;
+    margin-top: 0;
+  }
+
+  .testing-info {
+    color: #1565c0;
+    font-size: 14px;
+    margin: 10px 0 20px 0;
+    padding: 10px;
+    background: #e3f2fd;
+    border-left: 3px solid #2196f3;
+    border-radius: 3px;
+  }
+
+  .model-test-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto auto;
+    gap: 15px;
+    margin-bottom: 20px;
+    align-items: flex-end;
+  }
+
+  .control-item {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .control-item label {
+    margin-bottom: 8px;
+    color: #333;
+    font-weight: 500;
+    font-size: 14px;
+  }
+
+  .control-item select {
+    padding: 10px;
+    border: 1px solid #2196f3;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  .control-item input[type='range'] {
+    margin-bottom: 6px;
+  }
+
+  .model-test-controls button {
+    padding: 10px 16px;
+    font-size: 14px;
+    height: fit-content;
+  }
+
+  .model-test-controls button.testing {
+    background: #ffc107;
+  }
+
+  .regenerate-btn {
+    background: #ff9800 !important;
+  }
+
+  .regenerate-btn:hover {
+    background: #f57c00 !important;
+  }
+
+  .model-results {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 2px solid #2196f3;
+  }
+
+  .model-results h4 {
+    color: #1976d2;
+    margin-bottom: 15px;
+  }
+
+  .model-result-item {
+    background: white;
+    border: 1px solid #90caf9;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 15px;
+  }
+
+  .model-result-item .result-header {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+
+  .model-badge {
+    background: #2196f3;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 12px;
+  }
+
+  .timing {
+    color: #666;
+    font-size: 12px;
+    background: #f5f5f5;
+    padding: 4px 8px;
+    border-radius: 3px;
+  }
+
+  .filled-text-display {
+    margin-bottom: 12px;
+  }
+
+  .filled-text-display strong {
+    display: block;
+    margin-bottom: 8px;
+    color: #333;
+  }
+
+  .filled-text-display .text-box {
+    background: #f0fff0;
+    height: 120px;
+  }
+
+  .filled-text-display strong {
+    color: #d32f2f;
+    background: #ffebee;
+    padding: 1px 3px;
+    border-radius: 2px;
+    font-weight: 700;
+  }
+
+  .gaps-filled {
+    margin-top: 12px;
+  }
+
+  .gaps-filled strong {
+    display: block;
+    margin-bottom: 8px;
+    color: #333;
+  }
+
+  .gaps-table {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+    background: white;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .gaps-header {
+    display: grid;
+    grid-template-columns: 80px 1fr 1fr;
+    background: #f0f0f0;
+    border-bottom: 2px solid #ddd;
+    padding: 8px;
+    font-weight: bold;
+    font-size: 11px;
+    position: sticky;
+    top: 0;
+    gap: 8px;
+  }
+
+  .gaps-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 1fr;
+    padding: 8px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 11px;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .gaps-row:hover {
+    background: #f9f9f9;
+  }
+
+  .col-index {
+    font-weight: bold;
+    color: #f57c00;
+    white-space: nowrap;
+  }
+
+  .col-original {
+    color: #666;
+    background: #fffacd;
+    padding: 4px;
+    border-radius: 2px;
+    word-break: break-word;
+  }
+
+  .col-filled {
+    color: #1976d2;
+    background: #e3f2fd;
+    padding: 4px;
+    border-radius: 2px;
+    word-break: break-word;
   }
 
   @media (max-width: 1024px) {
@@ -781,6 +1602,56 @@
 
     .stats {
       grid-template-columns: repeat(2, 1fr);
+    }
+
+    .model-test-controls {
+      grid-template-columns: 1fr;
+      align-items: stretch;
+    }
+
+    .model-test-controls button {
+      width: 100%;
+    }
+
+    .results-controls {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .group-header {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .group-actions {
+      width: 100%;
+    }
+
+    .compare-btn {
+      width: 100%;
+    }
+
+    .result-model-row {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .gaps-header {
+      grid-template-columns: 60px 1fr 1fr;
+      font-size: 10px;
+      padding: 6px;
+    }
+
+    .gaps-row {
+      grid-template-columns: 60px 1fr 1fr;
+      padding: 6px;
+      font-size: 10px;
+    }
+
+    .col-original,
+    .col-filled {
+      padding: 2px;
+      font-size: 9px;
     }
   }
 </style>

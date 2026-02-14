@@ -72,7 +72,7 @@ function isWord(token) {
  * 
  * @param {string} text - Input text
  * @param {number} removalPercent - Percentage of words to remove (0-100)
- * @returns {object} {text_with_gaps, word_count, gaps_created}
+ * @returns {object} {text_with_gaps, word_count, gaps_created, gap_originals}
  */
 export function createGapsInText(text, removalPercent = 10) {
   if (!text || text.trim().length === 0) {
@@ -98,21 +98,54 @@ export function createGapsInText(text, removalPercent = 10) {
     throw new Error("No words found to remove (only numbers?)");
   }
 
-  // Calculate how many words to remove
-  const numToRemove = Math.ceil(wordIndices.length * (removalPercent / 100));
+  const requestedToRemove = Math.ceil(wordIndices.length * (removalPercent / 100));
+  const minWordDistance = 3;
+  const maxSpacedRemovals = Math.ceil(wordIndices.length / minWordDistance);
+  const numToRemove = Math.min(requestedToRemove, maxSpacedRemovals);
 
-  // Randomly select word indices to remove
-  const indicesToRemove = new Set();
-  while (indicesToRemove.size < numToRemove) {
-    const randomWordIdx = wordIndices[Math.floor(Math.random() * wordIndices.length)];
-    indicesToRemove.add(randomWordIdx);
+  const wordPositions = Array.from({ length: wordIndices.length }, (_, idx) => idx);
+  let bestSelection = [];
+
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const shuffled = [...wordPositions];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+
+    const selectedWordPositions = [];
+    shuffled.forEach((position) => {
+      const canSelect = selectedWordPositions.every(
+        (selected) => Math.abs(selected - position) >= minWordDistance
+      );
+      if (canSelect) {
+        selectedWordPositions.push(position);
+      }
+    });
+
+    if (selectedWordPositions.length > bestSelection.length) {
+      bestSelection = selectedWordPositions;
+    }
+    if (bestSelection.length >= numToRemove) {
+      break;
+    }
   }
 
-  // Replace selected words with [GAP:n]
+  const indicesToRemove = new Set(
+    bestSelection.slice(0, numToRemove).map((wordPos) => wordIndices[wordPos])
+  );
+
+  // Replace selected words with [GAP:n] and keep original words per index
   let gapIndex = 1;
+  const gapOriginals = [];
   const result = tokens.map((token, idx) => {
     if (indicesToRemove.has(idx)) {
-      return `[GAP:${gapIndex++}]`;
+      const currentGapIndex = gapIndex++;
+      gapOriginals.push({
+        index: currentGapIndex,
+        original: token
+      });
+      return `[GAP:${currentGapIndex}]`;
     }
     return token;
   }).join(' ');
@@ -121,7 +154,8 @@ export function createGapsInText(text, removalPercent = 10) {
     text_with_gaps: result,
     word_count: wordIndices.length,
     gaps_created: numToRemove,
-    removal_percent: removalPercent
+    removal_percent: removalPercent,
+    gap_originals: gapOriginals
   };
 }
 
