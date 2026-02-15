@@ -1,11 +1,10 @@
 <script>
-    import { Link } from "svelte-routing";
 </script>
 
 <header>
     <div class="container">
         <nav>
-            <Link to="/" class="logo">
+            <div class="logo">
                 <!-- SVG Logo -->
                 <svg
                     width="40"
@@ -30,17 +29,6 @@
                     />
                 </svg>
                 <span>A/B Testing</span>
-            </Link>
-            <div class="nav-links">
-                <li>
-                    <Link to="/" class="nav-link">Dashboard</Link>
-                </li>
-                <li>
-                    <Link to="/experiments" class="nav-link">Experiments</Link>
-                </li>
-                <li>
-                    <Link to="/bulk-gaps" class="nav-link">Bulk Gaps</Link>
-                </li>
             </div>
         </nav>
     </div>
@@ -50,7 +38,6 @@
     header {
         display: flex;
         justify-content: center;
-
         padding: 0px;
         margin: 0px;
         max-height: 5rem;
@@ -63,7 +50,7 @@
 
     nav {
         display: flex;
-        justify-content: space-between;
+        justify-content: center;
         align-items: center;
         padding: 1rem 0;
         margin: auto;
@@ -80,42 +67,5 @@
 
     .logo span {
         margin-left: 0.5rem;
-    }
-
-    .nav-links {
-        display: flex;
-        gap: 0.8rem;
-        color: aliceblue;
-    }
-    .nav-links li {
-        display: flex;
-    }
-    .nav-links a {
-        font-weight: bold;
-        color: aliceblue;
-        text-decoration: none;
-        margin-right: auto 0.05rem auto 0rem;
-        background-color: var(--accent-color);
-        border-radius: 0.8rem;
-        transition: all 0.2s ease;
-    }
-    .nav-links a:hover {
-        background-color: #006699;
-    }
-
-    .nav-link {
-        padding: 0.5rem 1rem;
-        border-radius: 4px;
-        text-decoration: none;
-        font-weight: 500;
-        transition: all 0.2s ease;
-    }
-
-    /* Style definitions already in app.css for .btn-primary and .btn-outline */
-
-    @media (max-width: 768px) {
-        .nav-links {
-            display: none; /* For mobile, you'll want to implement a hamburger menu */
-        }
     }
 </style>

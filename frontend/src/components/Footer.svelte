@@ -1,5 +1,4 @@
 <script>
-    import { Link } from "svelte-routing";
 </script>
 
 <footer>
@@ -16,20 +15,20 @@
             <div class="footer-section">
                 <h3>Quick Links</h3>
                 <ul class="footer-links">
-                    <li><Link to="/">Home</Link></li>
-                    <li><Link to="/filter">Search Cars</Link></li>
-                    <li><Link to="/additem">Sell Your Car</Link></li>
-                    <li><Link to="/about">About Us</Link></li>
+                    <li><a href="/">Home</a></li>
+                    <li><a href="/filter">Search Cars</a></li>
+                    <li><a href="/additem">Sell Your Car</a></li>
+                    <li><a href="/about">About Us</a></li>
                 </ul>
             </div>
 
             <div class="footer-section">
                 <h3>Contact</h3>
                 <ul class="footer-links">
-                    <li><Link to="/help">Help Center</Link></li>
-                    <li><Link to="/contact">Contact Us</Link></li>
-                    <li><Link to="/privacy">Privacy Policy</Link></li>
-                    <li><Link to="/terms">Terms of Service</Link></li>
+                    <li><a href="/help">Help Center</a></li>
+                    <li><a href="/contact">Contact Us</a></li>
+                    <li><a href="/privacy">Privacy Policy</a></li>
+                    <li><a href="/terms">Terms of Service</a></li>
                 </ul>
             </div>
         </div>
